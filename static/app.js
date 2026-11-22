@@ -408,7 +408,12 @@
       <button class="view-close icon-btn" aria-label="${t('back')}"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
       <p class="view-hint">${t('drag_hint')}</p>
       <div class="sheet">
-        <div class="handle"></div>
+        <button class="handle-btn" aria-expanded="true" aria-label="${t('sheet_hide')}"><span class="handle"></span></button>
+        <div class="sheet-mini">
+          <div class="mini-txt"><b>${t('row_seat', { r: rows[r], s: i + 1 })}</b><span>${inf.dist.toFixed(1)} м · ${inf.fov}°</span></div>
+          <button class="btn btn-white btn-sm" data-act="next">${money(total())} <svg class="ico" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+        </div>
+        <div class="sheet-body">
         <div class="sheet-head">
           <div><span class="kicker">${t(inf.kind)}</span>
             <h2>${t('row_seat', { r: rows[r], s: i + 1 })}</h2>
@@ -431,6 +436,7 @@
           <button class="btn btn-ghost" data-act="change">${t('change_seat')}</button>
           <button class="btn btn-white" data-act="next">${t('continue')} · ${money(total())}</button>
         </div>
+        </div>
       </div>`;
     page.append(view);
     document.body.classList.add('no-scroll');
@@ -438,7 +444,34 @@
     const close = () => { Hall3D.close(); view.remove(); document.body.classList.remove('no-scroll'); };
     $('.view-close', view).addEventListener('click', close);
     $('[data-act="change"]', view).addEventListener('click', close);
-    $('[data-act="next"]', view).addEventListener('click', () => { close(); goNext(); });
+    $$('[data-act="next"]', view).forEach((b) => b.addEventListener('click', () => { close(); goNext(); }));
+
+    // панель можно свернуть: нажатием на полоску или свайпом вниз; развернуть — нажатием или свайпом вверх
+    const handleBtn = $('.handle-btn', view);
+    const setMin = (min) => {
+      sheet.classList.toggle('min', min);
+      handleBtn.setAttribute('aria-expanded', String(!min));
+      handleBtn.setAttribute('aria-label', t(min ? 'sheet_show' : 'sheet_hide'));
+      store.set('sheetMin', min);
+    };
+    let swipe = null;
+    sheet.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button:not(.handle-btn)')) return;
+      swipe = { y: e.clientY, moved: false };
+    });
+    sheet.addEventListener('pointermove', (e) => {
+      if (swipe && Math.abs(e.clientY - swipe.y) > 8) swipe.moved = true;
+    });
+    sheet.addEventListener('pointerup', (e) => {
+      if (!swipe) return;
+      const dy = e.clientY - swipe.y;
+      if (dy > 30) setMin(true);
+      else if (dy < -30) setMin(false);
+      else if (!swipe.moved && (e.target.closest('.handle-btn') || sheet.classList.contains('min'))) setMin(!sheet.classList.contains('min'));
+      swipe = null;
+    });
+    sheet.addEventListener('pointercancel', () => { swipe = null; });
+    if (store.get('sheetMin', false)) setMin(true);
     view.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
     $('.view-close', view).focus();
     if (!Hall3D.available()) { sheet.classList.add('open'); return; }
