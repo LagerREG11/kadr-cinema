@@ -743,7 +743,7 @@
       <button class="view-close icon-btn" aria-label="${t('back')}"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
       <p class="view-hint">${t('drag_hint')}</p>
       <span class="view-mood"></span>
-      <button class="view-trailer btn btn-sm" hidden aria-pressed="false"><svg class="ico" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/></svg><span>${t('trailer_on')}</span></button>
+      <button class="view-sound icon-btn" hidden aria-pressed="false" aria-label="${t('sound_on')}">🔇</button>
       <div class="sheet">
         <button class="handle-btn" aria-expanded="true" aria-label="${t('sheet_hide')}"><span class="handle"></span></button>
         <div class="sheet-mini">
@@ -815,22 +815,25 @@
     const hour = Number(show.starts_at.slice(11, 13));
     const mood = hour >= 20 || hour < 6 ? 'night' : hour >= 17 ? 'evening' : 'day';
     const trailerKey = trailerOf(movie);
-    const tb = $('.view-trailer', view);
-    if (trailerKey && Hall3D.canTrailer()) {
-      tb.hidden = false;
-      tb.addEventListener('click', () => {
-        const on = tb.getAttribute('aria-pressed') !== 'true';
-        Hall3D.setTrailer(on ? trailerKey : null);
-        tb.setAttribute('aria-pressed', String(on));
-        $('span', tb).textContent = on ? t('trailer_off') : t('trailer_on');
-      });
-    }
     $('.view-mood', view).textContent = t('mood_' + mood);
     Hall3D.open($('canvas', view), {
       selected: S.order.seats, target, mood,
       onArrive: () => { sheet.classList.add('open'); hint.classList.add('show'); setTimeout(() => hint.classList.remove('show'), 3000); },
       onDrag: () => hint.classList.remove('show'),
     });
+    // трейлер включается на экране зала сам, со звуком; если браузер запретил автозвук — кнопка 🔊
+    if (trailerKey && Hall3D.canTrailer()) {
+      const sb = $('.view-sound', view);
+      Hall3D.setTrailer(trailerKey, {
+        onSound: (on) => {
+          sb.hidden = false;
+          sb.setAttribute('aria-pressed', String(on));
+          sb.textContent = on ? '🔊' : '🔇';
+          sb.setAttribute('aria-label', on ? t('sound_off') : t('sound_on'));
+        },
+      });
+      sb.addEventListener('click', () => Hall3D.setMuted(sb.getAttribute('aria-pressed') === 'true'));
+    }
   }
 
   // ---------- Страница: оплата ----------

@@ -885,9 +885,10 @@ body.kids .logo-mark { background: linear-gradient(135deg, #ffcf5c, #ff7ab6); }
 
 /* ===== 3D: настроение и трейлер ===== */
 .view-mood { position: absolute; top: max(16px, env(safe-area-inset-top)); right: 14px; font-size: 12px; background: rgba(20, 19, 22, .6); backdrop-filter: blur(10px); padding: 6px 10px; border-radius: 999px; color: #e9e6ec; }
-.view-trailer { position: absolute; top: calc(max(16px, env(safe-area-inset-top)) + 40px); right: 14px; background: rgba(20, 19, 22, .7); color: var(--text); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px #3a383e; }
-.view-trailer[aria-pressed="true"] { color: var(--green); box-shadow: inset 0 0 0 1px rgba(95, 211, 141, .6); }
+.view-sound { position: absolute; top: calc(max(16px, env(safe-area-inset-top)) + 40px); right: 14px; width: 44px; height: 44px; font-size: 20px; background: rgba(20, 19, 22, .7); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px #3a383e; }
+.view-sound[aria-pressed="false"] { box-shadow: inset 0 0 0 2px var(--green); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.08); } }
 .css3d-layer { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
 .view canvas { position: relative; z-index: 1; }
-.view .view-close, .view .view-hint, .view .sheet, .view .view-mood, .view .view-trailer { z-index: 2; }
+.view .view-close, .view .view-hint, .view .sheet, .view .view-mood, .view .view-sound { z-index: 2; }
 @media (max-width: 760px) { .kids-bar .chip-btn { font-size: 12px; padding: 6px 11px; } }

@@ -381,13 +381,39 @@
 
   // ---- трейлер на экране зала: iframe YouTube в CSS3D-слое под прозрачным «окном» в WebGL ----
   const canTrailer = () => typeof window.THREE !== 'undefined' && !!THREE.CSS3DRenderer;
-  function setTrailer(key) {
+  // команды плееру YouTube через его iframe-API (postMessage)
+  function yt(func, args = []) {
+    const f = ctx && ctx.yt && ctx.yt.frame;
+    if (f && f.contentWindow) f.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
+  }
+  function onYtMessage(e) {
+    if (!ctx || !ctx.yt || !/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(String(e.origin))) return;
+    let d;
+    try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch { return; }
+    if (!d || !d.info) return;
+    if (typeof d.info.playerState === 'number') ctx.yt.state = d.info.playerState;
+    if (typeof d.info.muted === 'boolean' && d.info.muted !== ctx.yt.muted) {
+      ctx.yt.muted = d.info.muted;
+      ctx.yt.onSound && ctx.yt.onSound(!d.info.muted);
+    }
+  }
+  function setMuted(muted) {
+    if (!ctx || !ctx.yt) return;
+    if (muted) yt('mute'); else { yt('unMute'); yt('setVolume', [100]); yt('playVideo'); }
+    ctx.yt.muted = muted;
+    ctx.yt.onSound && ctx.yt.onSound(!muted);
+  }
+
+  function setTrailer(key, opts = {}) {
     if (!ctx || !canTrailer()) return;
     const canvas = ctx.renderer.domElement;
     if (ctx.css) {
       ctx.css.renderer.domElement.remove();
       ctx.css = null;
     }
+    window.removeEventListener('message', onYtMessage);
+    if (ctx.yt) clearTimeout(ctx.yt.timer);
+    ctx.yt = null;
     if (!key || !/^[\w-]{11}$/.test(key)) {
       ctx.screen.material = ctx.screenMat;
       return;
@@ -398,8 +424,22 @@
     el.style.height = H + 'px';
     el.style.background = '#000';
     const frame = document.createElement('iframe');
-    frame.src = `https://www.youtube-nocookie.com/embed/${key}?autoplay=1&mute=1&controls=0&loop=1&playlist=${key}&playsinline=1&rel=0&modestbranding=1`;
+    // со звуком (mute=0): пользователь только что нажал «Вид с места», поэтому браузер обычно разрешает звук
+    frame.src = `https://www.youtube-nocookie.com/embed/${key}?autoplay=1&mute=0&controls=0&loop=1&playlist=${key}&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`;
     frame.allow = 'autoplay; encrypted-media';
+    ctx.yt = { frame, muted: false, state: -1, onSound: opts.onSound, timer: 0 };
+    window.addEventListener('message', onYtMessage);
+    frame.addEventListener('load', () => {
+      if (!ctx || !ctx.yt) return;
+      // подписка на состояние плеера и попытка включить звук
+      frame.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*');
+      yt('unMute'); yt('setVolume', [100]); yt('playVideo');
+      ctx.yt.onSound && ctx.yt.onSound(true);
+      // браузер не дал играть со звуком — играем без звука, звук включится кнопкой 🔊
+      ctx.yt.timer = setTimeout(() => {
+        if (ctx && ctx.yt && ctx.yt.state !== 1) { yt('mute'); yt('playVideo'); ctx.yt.muted = true; ctx.yt.onSound && ctx.yt.onSound(false); }
+      }, 2500);
+    });
     // YouTube требует адрес сайта-источника (иначе «ошибка настройки плеера»)
     frame.referrerPolicy = 'strict-origin-when-cross-origin';
     frame.style.cssText = `width:${W}px;height:${H}px;border:0;display:block`;
@@ -422,6 +462,8 @@
   function close() {
     if (!ctx) return;
     if (ctx.css) { ctx.css.renderer.domElement.remove(); ctx.css = null; }
+    window.removeEventListener('message', onYtMessage);
+    if (ctx.yt) clearTimeout(ctx.yt.timer);
     cancelAnimationFrame(ctx.raf);
     window.removeEventListener('resize', resize);
     ctx.scene.traverse((o) => {
@@ -435,6 +477,6 @@
 
   window.Hall3D = {
     available: () => typeof window.THREE !== 'undefined',
-    open, close, info, setTrailer, canTrailer,
+    open, close, info, setTrailer, setMuted, canTrailer,
   };
 })();
