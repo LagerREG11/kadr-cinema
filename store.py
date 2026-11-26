@@ -12,6 +12,7 @@ import sqlite3
 from datetime import date, datetime, timedelta
 
 import catalog as C
+import dbconn
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS movies (
@@ -54,10 +55,10 @@ MOVIE_FIELDS = ("age", "duration", "langs", "release", "colors", "motif", "title
                 "tmdb", "trailer", "poster_url")
 
 
-def init(conn: sqlite3.Connection) -> None:
+def init(conn) -> None:
     conn.executescript(SCHEMA)
-    # миграция старой базы: колонка города у сеансов
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(showtimes)")}
+    # миграция старой базы SQLite: колонка города у сеансов (в PostgreSQL таблица создаётся сразу с ней)
+    cols = {"city"} if dbconn.IS_PG else {r[1] for r in conn.execute("PRAGMA table_info(showtimes)")}
     if "city" not in cols:
         conn.execute("ALTER TABLE showtimes ADD COLUMN city TEXT NOT NULL DEFAULT 'kzo'")
         # уже заполненные дни относились к Кызылорде — пометить, чтобы не создать их повторно
@@ -68,6 +69,9 @@ def init(conn: sqlite3.Connection) -> None:
             data = {k: m.get(k) for k in MOVIE_FIELDS}
             conn.execute("INSERT INTO movies (id, data, active, updated_at) VALUES (?, ?, 1, ?)",
                          (m["id"], json.dumps(data, ensure_ascii=False), datetime.now().isoformat(timespec="seconds")))
+        if dbconn.IS_PG:
+            # фильмы вставлены с явными id — сдвинуть счётчик, чтобы новые фильмы из админки не конфликтовали
+            conn.execute("SELECT setval(pg_get_serial_sequence('movies', 'id'), (SELECT MAX(id) FROM movies))")
     conn.commit()
 
 

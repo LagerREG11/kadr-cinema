@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from flask import Blueprint, jsonify, session
 
 import catalog as C
+import dbconn
 import store
 
 bp = Blueprint("extras", __name__, url_prefix="/api")
@@ -72,10 +73,14 @@ def setup(**deps):
 
 def init(conn) -> None:
     conn.executescript(SCHEMA)
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(bookings)")}
-    for name, typ in BOOKING_COLUMNS.items():
-        if name not in cols:
-            conn.execute(f"ALTER TABLE bookings ADD COLUMN {name} {typ}")
+    if dbconn.IS_PG:
+        for name, typ in BOOKING_COLUMNS.items():
+            conn.execute(f"ALTER TABLE bookings ADD COLUMN IF NOT EXISTS {name} {typ}")
+    else:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(bookings)")}
+        for name, typ in BOOKING_COLUMNS.items():
+            if name not in cols:
+                conn.execute(f"ALTER TABLE bookings ADD COLUMN {name} {typ}")
     conn.commit()
 
 
@@ -266,7 +271,7 @@ def gift_buy():
                              (candidate, amount, amount, from_name, to_name, message, user["id"], last4, _ts(now())))
             code = candidate
             break
-        except sqlite3.IntegrityError:  # совпал код — пробуем другой
+        except dbconn.IntegrityError:  # совпал код — пробуем другой
             continue
     if not code:
         return err("generic", 500)
@@ -275,7 +280,7 @@ def gift_buy():
 
 # ---------- Рейтинги и отзывы ----------
 def ratings(conn) -> dict[int, dict]:
-    return {r[0]: {"avg": round(r[1], 1), "count": r[2]}
+    return {r[0]: {"avg": round(float(r[1]), 1), "count": int(r[2])}
             for r in conn.execute("SELECT movie_id, AVG(stars), COUNT(*) FROM reviews GROUP BY movie_id")}
 
 

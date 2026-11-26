@@ -23,6 +23,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import catalog as C
+import dbconn
 import extras
 import posters
 import store
@@ -97,11 +98,9 @@ CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings(user_id);
 """
 
 
-def db() -> sqlite3.Connection:
+def db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        g.db = dbconn.connect(DB_PATH)
     return g.db
 
 
@@ -113,8 +112,7 @@ def _close_db(_exc):
 
 
 def init_db() -> None:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = dbconn.connect(DB_PATH)
     conn.executescript(SCHEMA)
     conn.execute("PRAGMA journal_mode = WAL")
     store.init(conn)
@@ -229,7 +227,7 @@ def register():
             (name, email, phone or None, generate_password_hash(password), now().isoformat(timespec="seconds")),
         )
         db().commit()
-    except sqlite3.IntegrityError:
+    except dbconn.IntegrityError:
         return err("email_taken", 409)
     _reset_session()
     session.permanent = True
@@ -497,7 +495,7 @@ def create_booking():
                 conn.execute("INSERT INTO bonus_ledger (user_id, delta, reason, booking_id, created_at) VALUES (?, ?, 'earned', ?, ?)",
                              (user["id"], bonus_earned, bid, ts))
             extras.release(conn, show["id"], holder)
-    except sqlite3.IntegrityError as e:
+    except dbconn.IntegrityError as e:
         if "gift" in str(e):
             return err("gift_empty", 409)
         taken = set(_taken(show["id"]))
