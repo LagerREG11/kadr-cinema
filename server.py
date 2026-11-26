@@ -279,6 +279,8 @@ def _with_state(show: dict) -> dict:
 def catalog_view():
     return jsonify(
         cinema=C.CINEMA,
+        cities=C.CITIES,
+        default_city=C.DEFAULT_CITY,
         halls=C.HALLS,
         movies=store.movies(db()),
         days=[d.isoformat() for d in _day_range()],
@@ -294,7 +296,10 @@ def schedule():
         day = now().date()
     if day not in _day_range():
         return err("bad_date")
-    return jsonify(date=day.isoformat(), shows=[_with_state(s) for s in store.shows_for_day(db(), day)])
+    city = request.args.get("city", C.DEFAULT_CITY)
+    if city not in C.CITY_IDS:
+        return err("bad_city")
+    return jsonify(date=day.isoformat(), city=city, shows=[_with_state(s) for s in store.shows_for_day(db(), day, city)])
 
 
 def _taken(showtime_id: str) -> list[str]:

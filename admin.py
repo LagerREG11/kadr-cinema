@@ -96,6 +96,7 @@ def stats():
             "code": r["code"], "total": r["total"], "created_at": r["created_at"],
             "customer": r["name"], "email": r["email"], "seats": seats,
             "show": show, "title": titles.get(show["movie_id"]) if show else None,
+            "city": show["city"] if show else None,
         })
 
     return jsonify(
@@ -219,8 +220,11 @@ def list_shows():
         day = _admin_day(request.args.get("date", now().date().isoformat()))
     except ValueError:
         return err("bad_date")
+    city = request.args.get("city", C.DEFAULT_CITY)
+    if city not in C.CITY_IDS:
+        return err("bad_city")
     conn = db()
-    shows = store.shows_for_day(conn, day, include_cancelled=True)
+    shows = store.shows_for_day(conn, day, city, include_cancelled=True)
     for s in shows:
         s["sold"] = store.sold_count(conn, s["id"])
         s["past"] = datetime.fromisoformat(s["starts_at"]) <= now()
@@ -234,6 +238,9 @@ def create_show():
     conn = db()
     try:
         day = _admin_day(d.get("date"))
+        city = d.get("city") if d.get("city") in C.CITY_IDS else None
+        if not city:
+            raise ValueError("bad_city")
         hh, mm = map(int, str(d.get("time", "")).split(":"))
         start = datetime.combine(day, datetime.min.time()).replace(hour=hh, minute=mm)
         if mm % 5:
@@ -249,14 +256,14 @@ def create_show():
         return err(str(e) if str(e).startswith("bad_") else "bad_show")
     if start <= now():
         return err("bad_time")
-    clash = store.overlaps(conn, day, hall, start, movie["duration"])
+    clash = store.overlaps(conn, city, day, hall, start, movie["duration"])
     if clash:
         return err("overlap", 409, show=clash)
     try:
         prices = _clean_prices(d["prices"]) if d.get("prices") else C.prices_for(start.time(), hall, movie, store.price_cfg(conn))
     except (ValueError, TypeError):
         return err("bad_price")
-    show_id = store.add_show(conn, day, start, hall, movie["id"], lang, prices)
+    show_id = store.add_show(conn, city, day, start, hall, movie["id"], lang, prices)
     return jsonify(show=store.find_show(conn, show_id)), 201
 
 
@@ -275,7 +282,7 @@ def update_show(show_id):
                 return err("has_tickets", 409)
             if not cancel:
                 m = store.movie(conn, show["movie_id"])
-                clash = store.overlaps(conn, date.fromisoformat(show["date"]), show["hall"],
+                clash = store.overlaps(conn, show["city"], date.fromisoformat(show["date"]), show["hall"],
                                        datetime.fromisoformat(show["starts_at"]), m["duration"] if m else 120, ignore_id=show_id)
                 if clash:
                     return err("overlap", 409, show=clash)
@@ -296,6 +303,9 @@ def clear_hall():
     d = _body()
     try:
         day = _admin_day(d.get("date"))
+        city = d.get("city")
+        if city not in C.CITY_IDS:
+            raise ValueError
         hall = int(d.get("hall"))
         if hall not in C.HALLS:
             raise ValueError
@@ -304,7 +314,7 @@ def clear_hall():
     conn = db()
     n = 0
     with conn:
-        for s in store.shows_for_day(conn, day):
+        for s in store.shows_for_day(conn, day, city):
             if s["hall"] == hall and datetime.fromisoformat(s["starts_at"]) > now() and not store.sold_count(conn, s["id"]):
                 conn.execute("UPDATE showtimes SET cancelled = 1 WHERE id = ?", (s["id"],))
                 n += 1

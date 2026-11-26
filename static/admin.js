@@ -5,7 +5,7 @@
 
   const TX = {
     kk: {
-      title: 'Админ-панель', tab_stats: 'Шолу', tab_movies: 'Фильмдер', tab_shows: 'Сеанстар', tab_prices: 'Бағалар',
+      title: 'Админ-панель', city: 'Қала', tab_stats: 'Шолу', tab_movies: 'Фильмдер', tab_shows: 'Сеанстар', tab_prices: 'Бағалар',
       revenue: 'Барлық түсім', today: 'Бүгінгі түсім', tickets: 'Сатылған билет', bookings: 'Тапсырыстар',
       by_movie: 'Фильмдер бойынша', by_day: 'Күндер бойынша (30 күн)', recent: 'Соңғы сатылымдар', nothing: 'Әзірге сатылым жоқ',
       movie: 'Фильм', revenue_s: 'Түсім', day: 'Күн', code: 'Код', customer: 'Сатып алушы', show: 'Сеанс', seats: 'Орындар', sum: 'Сома', when: 'Уақыты',
@@ -30,7 +30,7 @@
       db_note: 'Ескерту: тегін хостингте дерекқор қайта іске қосқанда тазаланады — өзгерістер уақытша. Тұрақты дерекқор қосу керек.',
     },
     ru: {
-      title: 'Админ-панель', tab_stats: 'Обзор', tab_movies: 'Фильмы', tab_shows: 'Сеансы', tab_prices: 'Цены',
+      title: 'Админ-панель', city: 'Город', tab_stats: 'Обзор', tab_movies: 'Фильмы', tab_shows: 'Сеансы', tab_prices: 'Цены',
       revenue: 'Выручка всего', today: 'Выручка сегодня', tickets: 'Продано билетов', bookings: 'Заказов',
       by_movie: 'По фильмам', by_day: 'По дням (30 дней)', recent: 'Последние продажи', nothing: 'Продаж пока нет',
       movie: 'Фильм', revenue_s: 'Выручка', day: 'День', code: 'Код', customer: 'Покупатель', show: 'Сеанс', seats: 'Места', sum: 'Сумма', when: 'Когда',
@@ -69,6 +69,7 @@
   let tab = 'stats';
   let showDate = null;
   let showHall = '';
+  let showCity = null;
 
   window.AdminPage = async function AdminPage(page) {
     const { esc } = K();
@@ -95,7 +96,8 @@
 
   // ---------- Обзор ----------
   async function renderStats(body, ok) {
-    const { api, money, esc, L, fmtDay } = K();
+    const { api, money, esc, L, fmtDay, S } = K();
+    const cityLabel = (id) => L((S.cat.cities.find((c) => c.id === id) || {}).name) || id || '';
     const s = await api('/admin/stats');
     if (!ok()) return;
     const tile = (label, val) => `<div class="kpi"><span>${esc(label)}</span><b>${val}</b></div>`;
@@ -114,7 +116,7 @@
           <th>${a('code')}</th><th>${a('when')}</th><th>${a('customer')}</th><th>${a('movie')}</th><th>${a('show')}</th><th>${a('seats')}</th><th class="num">${a('sum')}</th></tr></thead><tbody>
         ${s.recent.map((r) => `<tr><td><code>${esc(r.code)}</code></td><td>${esc(r.created_at.slice(5, 16).replace('T', ' '))}</td>
           <td>${esc(r.customer)}<br><small class="muted">${esc(r.email)}</small></td><td>${esc(L(r.title) || '—')}</td>
-          <td>${r.show ? `${fmtDay(r.show.date)}, ${r.show.time} · ${r.show.hall}` : '—'}</td><td>${r.seats.map(esc).join(', ')}</td><td class="num">${money(r.total)}</td></tr>`).join('')}
+          <td>${r.show ? `${esc(cityLabel(r.show.city))} · ${fmtDay(r.show.date)}, ${r.show.time} · ${r.show.hall}` : '—'}</td><td>${r.seats.map(esc).join(', ')}</td><td class="num">${money(r.total)}</td></tr>`).join('')}
       </tbody></table></div>` : `<p class="muted">${a('nothing')}</p>`}</section>`;
   }
 
@@ -203,7 +205,8 @@
   async function renderShows(body, ok) {
     const { api, esc, L, money, S, langLabel, toast } = K();
     if (!showDate) showDate = S.cat.days[0];
-    const [{ shows }, { movies }] = await Promise.all([api(`/admin/shows?date=${showDate}`), api('/admin/movies')]);
+    if (!showCity) showCity = S.city || S.cat.default_city;
+    const [{ shows }, { movies }] = await Promise.all([api(`/admin/shows?date=${showDate}&city=${showCity}`), api('/admin/movies')]);
     if (!ok()) return;
     const byId = Object.fromEntries(movies.map((m) => [m.id, m]));
     const halls = S.cat.halls;
@@ -211,6 +214,7 @@
     const active = movies.filter((m) => m.active);
     body.innerHTML = `
       <div class="frow toolbar">
+        <label class="field"><span>${a('city')}</span><select id="sCity">${S.cat.cities.map((c) => `<option value="${c.id}" ${c.id === showCity ? 'selected' : ''}>${esc(L(c.name))}</option>`).join('')}</select></label>
         <label class="field"><span>${a('date')}</span><input type="date" id="sDate" value="${showDate}"></label>
         <label class="field"><span>${a('hall')}</span><select id="sHall"><option value="">${a('all_halls')}</option>${Object.entries(halls).map(([k, h]) => `<option value="${k}" ${k === showHall ? 'selected' : ''}>${esc(h.name)} · ${h.format}</option>`).join('')}</select></label>
         ${showHall ? `<button class="btn btn-ghost-b btn-sm" id="clearHall">${a('clear_hall')}</button>` : ''}
@@ -241,12 +245,13 @@
         }).join('')}</tbody></table></div>` : `<p class="empty">${a('no_shows')}</p>`}`;
 
     const rerender = () => window.AdminPage(document.getElementById('page'));
+    body.querySelector('#sCity').addEventListener('change', (e) => { showCity = e.target.value; rerender(); });
     body.querySelector('#sDate').addEventListener('change', (e) => { if (e.target.value) { showDate = e.target.value; rerender(); } });
     body.querySelector('#sHall').addEventListener('change', (e) => { showHall = e.target.value; rerender(); });
     const ch = body.querySelector('#clearHall');
     if (ch) ch.addEventListener('click', async () => {
       if (!confirm(a('clear_confirm', { h: halls[showHall].name }))) return;
-      try { const r = await api('/admin/shows/clear', { method: 'POST', body: { date: showDate, hall: Number(showHall) } }); toast(a('cleared', { n: r.cancelled })); K().S.sched = {}; rerender(); } catch (e) { toast(aerr(e)); }
+      try { const r = await api('/admin/shows/clear', { method: 'POST', body: { date: showDate, hall: Number(showHall), city: showCity } }); toast(a('cleared', { n: r.cancelled })); K().S.sched = {}; rerender(); } catch (e) { toast(aerr(e)); }
     });
 
     const form = body.querySelector('.addshow');
@@ -260,7 +265,7 @@
       e.preventDefault();
       const f = form.elements;
       try {
-        await api('/admin/shows', { method: 'POST', body: { date: showDate, time: f.time.value, hall: Number(f.hall.value), movie_id: Number(f.movie.value), lang: f.lang.value } });
+        await api('/admin/shows', { method: 'POST', body: { city: showCity, date: showDate, time: f.time.value, hall: Number(f.hall.value), movie_id: Number(f.movie.value), lang: f.lang.value } });
         toast(a('show_added'));
         K().S.sched = {};
         rerender();

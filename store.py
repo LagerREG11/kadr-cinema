@@ -29,9 +29,9 @@ CREATE TABLE IF NOT EXISTS showtimes (
     lang TEXT NOT NULL,
     prices TEXT NOT NULL,
     cancelled INTEGER NOT NULL DEFAULT 0,
-    source TEXT NOT NULL DEFAULT 'auto'
+    source TEXT NOT NULL DEFAULT 'auto',
+    city TEXT NOT NULL DEFAULT 'kzo'
 );
-CREATE INDEX IF NOT EXISTS idx_showtimes_day ON showtimes(day);
 CREATE TABLE IF NOT EXISTS filled_days (day TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS favorites (
@@ -56,6 +56,13 @@ MOVIE_FIELDS = ("age", "duration", "langs", "release", "colors", "motif", "title
 
 def init(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    # миграция старой базы: колонка города у сеансов
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(showtimes)")}
+    if "city" not in cols:
+        conn.execute("ALTER TABLE showtimes ADD COLUMN city TEXT NOT NULL DEFAULT 'kzo'")
+        # уже заполненные дни относились к Кызылорде — пометить, чтобы не создать их повторно
+        conn.execute("UPDATE filled_days SET day = 'kzo:' || day WHERE day NOT LIKE '%:%'")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_showtimes_city_day ON showtimes(city, day)")
     if not conn.execute("SELECT 1 FROM movies LIMIT 1").fetchone():
         for m in C.SEED_MOVIES:
             data = {k: m.get(k) for k in MOVIE_FIELDS}
@@ -130,49 +137,61 @@ def _show_row(r) -> dict:
         "prices": json.loads(r["prices"]),
         "cancelled": bool(r["cancelled"]),
         "source": r["source"],
+        "city": r["city"],
     }
 
 
-def ensure_day(conn, day: date) -> None:
-    """Если день ещё не заполнен — создать расписание и сохранить его."""
+def ensure_day(conn, day: date, city: str = C.DEFAULT_CITY) -> None:
+    """Если день в этом городе ещё не заполнен — создать расписание и сохранить его."""
     key = day.isoformat()
-    if conn.execute("SELECT 1 FROM filled_days WHERE day = ?", (key,)).fetchone():
+    fkey = f"{city}:{key}"
+    if conn.execute("SELECT 1 FROM filled_days WHERE day = ?", (fkey,)).fetchone():
         return
-    rows = C.generate_day(day, movies(conn), price_cfg(conn))
+    rows = C.generate_day(day, movies(conn), price_cfg(conn), city)
     with conn:
         conn.executemany(
-            "INSERT OR IGNORE INTO showtimes (id, day, movie_id, hall, starts_at, lang, prices, cancelled, source) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'auto')",
-            [(s["id"], key, s["movie_id"], s["hall"], s["starts_at"], s["lang"], json.dumps(s["prices"])) for s in rows],
+            "INSERT OR IGNORE INTO showtimes (id, day, movie_id, hall, starts_at, lang, prices, cancelled, source, city) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'auto', ?)",
+            [(s["id"], key, s["movie_id"], s["hall"], s["starts_at"], s["lang"], json.dumps(s["prices"]), city) for s in rows],
         )
-        conn.execute("INSERT OR IGNORE INTO filled_days (day) VALUES (?)", (key,))
+        conn.execute("INSERT OR IGNORE INTO filled_days (day) VALUES (?)", (fkey,))
 
 
-def shows_for_day(conn, day: date, include_cancelled: bool = False) -> list[dict]:
-    ensure_day(conn, day)
-    sql = "SELECT * FROM showtimes WHERE day = ?" + ("" if include_cancelled else " AND cancelled = 0") + " ORDER BY starts_at, hall"
-    return [_show_row(r) for r in conn.execute(sql, (day.isoformat(),))]
+def shows_for_day(conn, day: date, city: str = C.DEFAULT_CITY, include_cancelled: bool = False) -> list[dict]:
+    ensure_day(conn, day, city)
+    sql = "SELECT * FROM showtimes WHERE city = ? AND day = ?" + ("" if include_cancelled else " AND cancelled = 0") + " ORDER BY starts_at, hall"
+    return [_show_row(r) for r in conn.execute(sql, (city, day.isoformat()))]
+
+
+def parse_show_id(show_id: str) -> tuple[str, date] | None:
+    """«ala-20261127-2-1710» → ('ala', дата)."""
+    parts = show_id.split("-")
+    if len(parts) != 4 or parts[0] not in C.CITY_IDS:
+        return None
+    try:
+        return parts[0], datetime.strptime(parts[1], "%Y%m%d").date()
+    except ValueError:
+        return None
 
 
 def find_show(conn, show_id: str, include_cancelled: bool = False) -> dict | None:
     r = conn.execute("SELECT * FROM showtimes WHERE id = ?", (show_id,)).fetchone()
     if not r:
         # день ещё не заполнен — заполнить и поискать снова
-        try:
-            day = datetime.strptime(show_id.split("-")[0], "%Y%m%d").date()
-        except ValueError:
+        parsed = parse_show_id(show_id)
+        if not parsed:
             return None
-        ensure_day(conn, day)
+        ensure_day(conn, parsed[1], parsed[0])
         r = conn.execute("SELECT * FROM showtimes WHERE id = ?", (show_id,)).fetchone()
     if not r or (r["cancelled"] and not include_cancelled):
         return None
     return _show_row(r)
 
 
-def overlaps(conn, day: date, hall: int, start: datetime, duration: int, ignore_id: str | None = None) -> dict | None:
+def overlaps(conn, city: str, day: date, hall: int, start: datetime, duration: int, ignore_id: str | None = None) -> dict | None:
     """Есть ли в зале сеанс, пересекающийся с новым (с учётом 15 минут на уборку)."""
     end = start + timedelta(minutes=duration + 15)
-    for s in shows_for_day(conn, day) + shows_for_day(conn, day - timedelta(days=1)):
+    for s in shows_for_day(conn, day, city) + shows_for_day(conn, day - timedelta(days=1), city):
         if s["hall"] != hall or s["id"] == ignore_id:
             continue
         m = movie(conn, s["movie_id"])
@@ -183,13 +202,13 @@ def overlaps(conn, day: date, hall: int, start: datetime, duration: int, ignore_
     return None
 
 
-def add_show(conn, day: date, start: datetime, hall: int, movie_id: int, lang: str, prices: dict) -> str:
-    show_id = f"{day:%Y%m%d}-{hall}-{start:%H%M}"
+def add_show(conn, city: str, day: date, start: datetime, hall: int, movie_id: int, lang: str, prices: dict) -> str:
+    show_id = f"{city}-{day:%Y%m%d}-{hall}-{start:%H%M}"
     with conn:
         conn.execute(
-            "INSERT INTO showtimes (id, day, movie_id, hall, starts_at, lang, prices, cancelled, source) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'admin') "
+            "INSERT INTO showtimes (id, day, movie_id, hall, starts_at, lang, prices, cancelled, source, city) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'admin', ?) "
             "ON CONFLICT(id) DO UPDATE SET movie_id = excluded.movie_id, lang = excluded.lang, prices = excluded.prices, cancelled = 0, source = 'admin'",
-            (show_id, day.isoformat(), movie_id, hall, start.isoformat(timespec="minutes"), lang, json.dumps(prices)),
+            (show_id, day.isoformat(), movie_id, hall, start.isoformat(timespec="minutes"), lang, json.dumps(prices), city),
         )
     return show_id
 

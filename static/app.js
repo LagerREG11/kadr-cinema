@@ -21,6 +21,7 @@
   const S = {
     lang: store.get('lang', 'kk'),
     mode: store.get('mode', 'movies'),
+    city: store.get('city', null),
     tab: 'schedule',
     user: null,
     cat: null,
@@ -135,6 +136,49 @@
     if (S.tmdbOn && foot && !foot.textContent) foot.innerHTML = `<p>${t('tmdb_note')} <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a>. This product uses the TMDB API but is not endorsed or certified by TMDB.</p>`;
   }
   const todayIso = () => S.cat.days[0];
+  const cityName = (id) => L(((S.cat && S.cat.cities) || []).find((c) => c.id === id)?.name) || '';
+
+  // ---------- Выбор города ----------
+  function openCityPicker(first) {
+    if ($('.city-modal')) return;
+    const box = document.createElement('div');
+    box.className = 'modal city-modal';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', t('choose_city'));
+    const def = S.cat.default_city;
+    const list = S.cat.cities.slice().sort((a, b) => (a.id === def ? -1 : b.id === def ? 1 : L(a.name).localeCompare(L(b.name), S.lang)));
+    box.innerHTML = `<div class="card city-card">
+        <div class="city-head"><h2>${t('choose_city')}</h2>${first ? '' : `<button class="icon-btn modal-x" aria-label="${t('close')}"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`}</div>
+        <label class="field city-search"><input type="search" placeholder="${t('search_city')}" aria-label="${t('search_city')}"></label>
+        <div class="city-list">${list.map((c) => `<button class="city-opt${c.id === (S.city || def) ? ' on' : ''}" data-city="${c.id}">${esc(L(c.name))}</button>`).join('')}</div>
+      </div>`;
+    const close = () => { box.parentNode && box.parentNode.removeChild(box); document.body.classList.remove('no-scroll'); };
+    box.addEventListener('click', (e) => {
+      const opt = e.target.closest('[data-city]');
+      if (opt) {
+        const changed = opt.dataset.city !== S.city;
+        S.city = opt.dataset.city;
+        store.set('city', S.city);
+        close();
+        updateChrome();
+        if (changed) {
+          S.sched = {};
+          if (S.order && !S.order.showId.startsWith(S.city + '-')) { S.order = null; saveOrder(); }
+          route();
+        }
+        return;
+      }
+      if (!first && (e.target === box || e.target.closest('.modal-x'))) close();
+    });
+    const input = $('input', box);
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      $$('.city-opt', box).forEach((b) => { b.hidden = !!q && !b.textContent.toLowerCase().includes(q); });
+    });
+    document.body.append(box);
+    document.body.classList.add('no-scroll');
+    if (!first) input.focus();
+  }
   const isPresale = (m) => !!(m.release && m.release > todayIso());
 
   // ---------- Трейлер ----------
@@ -261,6 +305,8 @@
       : hash.startsWith('#/tickets') || hash.startsWith('#/ticket/') ? 'tickets'
       : hash.startsWith('#/profile') || hash.startsWith('#/login') || hash.startsWith('#/register') ? 'profile' : 'home';
     $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === section));
+    const cb = $('#cityBtn');
+    if (cb && S.cat) cb.querySelector('span').textContent = cityName(S.city || S.cat.default_city);
     const an = $('#adminNav');
     if (an) an.hidden = !(S.user && S.user.is_admin);
     const ub = $('#userBtn');
@@ -275,8 +321,9 @@
 
   // ---------- Данные ----------
   async function loadSchedule(day) {
-    if (!S.sched[day]) S.sched[day] = (await api(`/schedule?date=${day}`)).shows;
-    return S.sched[day];
+    const key = `${S.city}|${day}`;
+    if (!S.sched[key]) S.sched[key] = (await api(`/schedule?date=${day}&city=${encodeURIComponent(S.city)}`)).shows;
+    return S.sched[key];
   }
 
   function dateStrip(onPick) {
@@ -312,7 +359,7 @@
         <div class="hero-art" aria-hidden="true"><div class="hero-screen"></div>${[...Array(5)].map(() => '<i></i>').join('')}</div>
         <div class="hero-in">
           <h1>${esc(c.name)}</h1>
-          <p class="muted"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>${esc(L(c.city))}, ${esc(L(c.address))}</p>
+          <p class="muted"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>${esc(cityName(S.city))}, ${esc(L(c.address))}</p>
           <div class="chips">${Object.values(S.cat.halls).map((hl) => `<span class="chip">${esc(hl.name)} · ${esc(hl.format)}</span>`).join('')}</div>
         </div>
       </section>
@@ -406,7 +453,7 @@
       <p>${t('about_text')}</p>
       <div class="about-grid">
         <div class="info-card"><h4>${t('halls_title')}</h4>${Object.values(S.cat.halls).map((hl) => `<p>${esc(hl.name)} — ${esc(hl.format)}, 126 + VIP</p>`).join('')}</div>
-        <div class="info-card"><h4>${t('address')}</h4><p>${esc(L(c.city))}, ${esc(L(c.address))}</p><h4>${t('hours')}</h4><p>${esc(c.hours)}</p></div>
+        <div class="info-card"><h4>${t('address')}</h4><p>${esc(cityName(S.city))}, ${esc(L(c.address))}</p><h4>${t('hours')}</h4><p>${esc(c.hours)}</p></div>
         <div class="info-card"><h4>${t('contacts')}</h4><p>${esc(c.phone)}</p></div>
       </div>
     </div>`;
@@ -459,7 +506,7 @@
   }
 
   // ---------- Страница: выбор мест ----------
-  const showLine = (show) => `${fmtDay(show.date)}, ${show.time} · ${S.cat.halls[show.hall].name} · ${show.format} · ${langLabel(show.lang)}`;
+  const showLine = (show) => `${show.city ? cityName(show.city) + ' · ' : ''}${fmtDay(show.date)}, ${show.time} · ${S.cat.halls[show.hall].name} · ${show.format} · ${langLabel(show.lang)}`;
   const AISLES = [3, 11];
 
   async function pageSession(page, id) {
@@ -492,7 +539,7 @@
         <div class="sp-info">
           <h2>${esc(L(movie.title))}</h2>
           <p class="sp-meta">${dateShort} • ${show.time} • ${show.format} <span class="badge">${langLabel(show.lang)}</span> <span class="badge badge-age">${movie.age}+</span></p>
-          <p class="sp-place">${esc(S.cat.cinema.name)} • ${esc(S.cat.halls[show.hall].name)}</p>
+          <p class="sp-place">${esc(S.cat.cinema.name)} ${esc(cityName(show.city))} • ${esc(S.cat.halls[show.hall].name)}</p>
         </div>
       </div>
       ${show.past ? `<p class="warn">${t('show_started')}</p>` : ''}
@@ -1047,12 +1094,17 @@
       S.cat = cat;
       S.user = me.user;
       S.date = cat.days[0];
+      if (!S.city || !cat.cities.some((c) => c.id === S.city)) S.city = null;
     } catch (e) {
       $('#page').innerHTML = `<div class="card center"><p>${esc(errMsg(e))}</p></div>`;
       return;
     }
+    const firstVisit = !S.city;
+    if (!S.city) S.city = S.cat.default_city;
+    $('#cityBtn').addEventListener('click', () => openCityPicker(false));
     await loadLists();
     route();
+    if (firstVisit) openCityPicker(true);
     checkNotifications();
     setInterval(checkNotifications, 15 * 60 * 1000);
     // официальные постеры грузятся отдельно, чтобы не задерживать открытие сайта

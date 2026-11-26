@@ -26,6 +26,33 @@ DAYS_AHEAD = 14
 PRESALE_HORIZON = 60   # фильмы с премьерой в ближайшие N дней продаются заранее
 PRESALE_DAYS = 3       # сколько дней с премьеры открыто в предпродаже
 
+# Города Казахстана (в каждом — кинотеатр KADR Cinema со своим расписанием)
+CITIES = [
+    {"id": "kzo", "name": {"kk": "Қызылорда", "ru": "Кызылорда"}},
+    {"id": "ala", "name": {"kk": "Алматы", "ru": "Алматы"}},
+    {"id": "ast", "name": {"kk": "Астана", "ru": "Астана"}},
+    {"id": "shy", "name": {"kk": "Шымкент", "ru": "Шымкент"}},
+    {"id": "kar", "name": {"kk": "Қарағанды", "ru": "Караганда"}},
+    {"id": "akt", "name": {"kk": "Ақтөбе", "ru": "Актобе"}},
+    {"id": "tar", "name": {"kk": "Тараз", "ru": "Тараз"}},
+    {"id": "pav", "name": {"kk": "Павлодар", "ru": "Павлодар"}},
+    {"id": "ukk", "name": {"kk": "Өскемен", "ru": "Усть-Каменогорск"}},
+    {"id": "sem", "name": {"kk": "Семей", "ru": "Семей"}},
+    {"id": "atr", "name": {"kk": "Атырау", "ru": "Атырау"}},
+    {"id": "kst", "name": {"kk": "Қостанай", "ru": "Костанай"}},
+    {"id": "ura", "name": {"kk": "Орал", "ru": "Уральск"}},
+    {"id": "ppk", "name": {"kk": "Петропавл", "ru": "Петропавловск"}},
+    {"id": "aau", "name": {"kk": "Ақтау", "ru": "Актау"}},
+    {"id": "tur", "name": {"kk": "Түркістан", "ru": "Туркестан"}},
+    {"id": "kok", "name": {"kk": "Көкшетау", "ru": "Кокшетау"}},
+    {"id": "tdk", "name": {"kk": "Талдықорған", "ru": "Талдыкорган"}},
+    {"id": "eki", "name": {"kk": "Екібастұз", "ru": "Экибастуз"}},
+    {"id": "zhz", "name": {"kk": "Жезқазған", "ru": "Жезказган"}},
+    {"id": "kon", "name": {"kk": "Қонаев", "ru": "Конаев"}},
+]
+CITY_IDS = {c["id"] for c in CITIES}
+DEFAULT_CITY = "kzo"
+
 HALLS = {
     1: {"name": "Зал 1", "format": "2D"},
     2: {"name": "Зал 2", "format": "3D"},
@@ -212,9 +239,9 @@ def prices_for(start: time, hall: int, movie: dict, cfg: dict | None = None) -> 
     return {"adult": adult, "child": child, "student": student, "vip": vip}
 
 
-def generate_day(day: date, movies: list[dict], cfg: dict | None = None) -> list[dict]:
+def generate_day(day: date, movies: list[dict], cfg: dict | None = None, city: str = DEFAULT_CITY) -> list[dict]:
     """Автозаполнение расписания на день (детерминированно). Результат сохраняется в базе и дальше не меняется сам."""
-    rng = random.Random(day.toordinal() * 7919)
+    rng = random.Random(day.toordinal() * 7919 + sum(ord(ch) * 131 ** k for k, ch in enumerate(city)))
     playing = [m for m in movies if not release_of(m) or release_of(m) <= day]
     if not playing:
         return []
@@ -239,7 +266,8 @@ def generate_day(day: date, movies: list[dict], cfg: dict | None = None) -> list
             start = t.replace(minute=t.minute - t.minute % 5, second=0)
             lang = rng.choice(movie["langs"])
             shows.append({
-                "id": f"{day:%Y%m%d}-{hall}-{start:%H%M}",
+                "id": f"{city}-{day:%Y%m%d}-{hall}-{start:%H%M}",
+                "city": city,
                 "movie_id": movie["id"],
                 "hall": hall,
                 "date": day.isoformat(),
