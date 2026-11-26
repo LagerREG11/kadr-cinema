@@ -311,24 +311,40 @@
       return show.prices[tp] ?? show.prices.adult;
     };
 
+    const d = parseDay(show.date);
+    const dateShort = `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getFullYear()).slice(2)}`;
     page.className = 'narrow seatpage';
     page.innerHTML = `
-      <div class="sp-head">
+      <div class="sp-top">
         <a class="icon-btn" href="#/movie/${movie.id}" aria-label="${t('back')}"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></a>
-        <div><h2>${esc(L(movie.title))} <span class="age">${movie.age}+</span></h2><p>${showLine(show)}</p></div>
+        <h1>${t('choose_seats')}</h1>
+      </div>
+      <div class="sp-head">
+        ${poster(movie, 'xs')}
+        <div class="sp-info">
+          <h2>${esc(L(movie.title))}</h2>
+          <p class="sp-meta">${dateShort} • ${show.time} • ${show.format} <span class="badge">${langLabel(show.lang)}</span> <span class="badge badge-age">${movie.age}+</span></p>
+          <p class="sp-place">${esc(S.cat.cinema.name)} • ${esc(S.cat.halls[show.hall].name)}</p>
+        </div>
       </div>
       ${show.past ? `<p class="warn">${t('show_started')}</p>` : ''}
-      <div class="hall-scroll" id="hallScroll"><div class="hall-inner">
-        <div class="screen" aria-hidden="true">
-          <svg viewBox="0 0 400 60" preserveAspectRatio="none">
-            <path d="M0 60 L0 26 Q200 -6 400 26 L400 60 Z" fill="url(#glow)"/>
-            <path d="M8 26 Q200 -4 392 26" fill="none" stroke="url(#arc)" stroke-width="2"/>
-          </svg>
-          <span>${t('screen')}</span>
+      <div class="map">
+        <div class="zoom">
+          <button class="zbtn" id="zIn" aria-label="${t('zoom_in')}"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+          <button class="zbtn" id="zOut" aria-label="${t('zoom_out')}"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
         </div>
-        <div class="grid" id="grid" role="grid"></div>
-      </div></div>
-      <p class="pan-hint">${t('pan_hint')}</p>
+        <div class="hall-scroll" id="hallScroll"><div class="hall-inner" id="hallInner">
+          <div class="screen2" aria-hidden="true">
+            <svg viewBox="0 0 400 64" preserveAspectRatio="none">
+              <defs><linearGradient id="scrFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9e6ec" stop-opacity=".55"/><stop offset="1" stop-color="#e9e6ec" stop-opacity=".04"/></linearGradient></defs>
+              <path d="M2 10 Q200 -8 398 10 L378 60 Q200 44 22 60 Z" fill="url(#scrFill)"/>
+              <path d="M2 10 Q200 -8 398 10" fill="none" stroke="#f4f2f5" stroke-opacity=".8" stroke-width="2.5"/>
+            </svg>
+            <span>${t('screen')}</span>
+          </div>
+          <div class="grid" id="grid" role="grid"></div>
+        </div></div>
+      </div>
       <ul class="legend">
         <li><i class="dot available"></i>${t('available')}</li>
         <li><i class="dot taken"></i>${t('taken')}</li>
@@ -346,10 +362,8 @@
     const drawGrid = () => {
       grid.innerHTML = '';
       for (let r = 0; r < rows.length; r++) {
-        const lab = document.createElement('div');
-        lab.className = 'row-label';
-        lab.textContent = rows[r];
-        grid.append(lab);
+        // VIP-ряды отделены от основного зала небольшим проходом
+        if (isVip(r) && !isVip(r - 1)) grid.append(Object.assign(document.createElement('div'), { className: 'row-gap' }));
         for (let i = 0; i < perRow; i++) {
           if (AISLES.includes(i)) grid.append(Object.assign(document.createElement('div'), { className: 'aisle' }));
           const b = document.createElement('button');
@@ -358,8 +372,8 @@
           const sel = isSel(r, i);
           b.className = 'seat' + (isVip(r) ? ' vip' : '') + (tk ? ' taken' : '') + (sel ? ' selected' : '');
           b.disabled = tk || show.past;
-          if (sel) b.textContent = i + 1;
-          b.setAttribute('aria-label', t('row_seat', { r: rows[r], s: i + 1 }) + (tk ? `, ${t('taken')}` : ''));
+          b.textContent = i + 1;
+          b.setAttribute('aria-label', t('row_seat', { r: r + 1, s: i + 1 }) + (tk ? `, ${t('taken')}` : ''));
           b.setAttribute('aria-pressed', String(sel));
           b.addEventListener('click', () => {
             if (sel) S.order.seats = S.order.seats.filter((s) => !(s.r === r && s.i === i));
@@ -369,12 +383,40 @@
           });
           grid.append(b);
         }
+        const lab = document.createElement('div');
+        lab.className = 'row-label';
+        lab.textContent = t('row_n', { n: r + 1 });
+        grid.append(lab);
       }
     };
+
+    // масштаб схемы: «по ширине экрана» и два уровня приближения
+    const hs = $('#hallScroll'), inner = $('#hallInner');
+    const ZOOMS = [1, 1.4, 1.85];
+    let zoom = Math.min(store.get('zoom', 0), ZOOMS.length - 1);
+    const applyZoom = (keepCenter) => {
+      const cx = hs.scrollWidth ? (hs.scrollLeft + hs.clientWidth / 2) / hs.scrollWidth : 0.5;
+      // ширина = поля 2×16 + подпись ряда ~62 + 16 промежутков по 3px + 14 мест + 2 прохода по 0.7 места
+      const labelW = 62, gap = 3, pad = 32;
+      const fit = (hs.clientWidth - pad - labelW - (perRow + 2) * gap) / (perRow + 2 * 0.7);
+      const base = Math.max(14, Math.min(30, Math.floor(fit)));
+      const s = Math.round(base * ZOOMS[zoom]);
+      inner.style.setProperty('--s', s + 'px');
+      inner.style.setProperty('--a', Math.round(s * 0.7) + 'px');
+      $('#zIn').disabled = zoom === ZOOMS.length - 1;
+      $('#zOut').disabled = zoom === 0;
+      hs.scrollLeft = keepCenter ? cx * hs.scrollWidth - hs.clientWidth / 2 : (hs.scrollWidth - hs.clientWidth) / 2;
+    };
+    $('#zIn').addEventListener('click', () => { zoom = Math.min(zoom + 1, ZOOMS.length - 1); store.set('zoom', zoom); applyZoom(true); });
+    $('#zOut').addEventListener('click', () => { zoom = Math.max(zoom - 1, 0); store.set('zoom', zoom); applyZoom(true); });
+    window.addEventListener('resize', function onRz() {
+      if (!document.body.contains(hs)) return window.removeEventListener('resize', onRz);
+      applyZoom(true);
+    });
     const total = () => S.order.seats.reduce((sum, { r, i }) => sum + priceFor(r, i), 0);
     const drawBar = () => {
       const n = S.order.seats.length;
-      if (n === 1) { const { r, i } = S.order.seats[0]; $('#barLabel').textContent = t('row_seat_short', { r: rows[r], s: i + 1 }); }
+      if (n === 1) { const { r, i } = S.order.seats[0]; $('#barLabel').textContent = t('row_seat_short', { r: r + 1, s: i + 1 }); }
       else $('#barLabel').textContent = n ? t('seats_n', { n }) : t('choose_seats');
       $('#barPrice').textContent = n ? money(total()) : '—';
       $('#contBtn').disabled = !n || show.past;
@@ -389,9 +431,7 @@
     $('#contBtn').addEventListener('click', goNext);
     $('#v3dBtn').addEventListener('click', () => open3D(page, show, movie, priceFor, total, goNext));
     drawGrid(); drawBar();
-    // на узком экране схема шире окна — показываем её центр (там лучшие места)
-    const hs = $('#hallScroll');
-    hs.scrollLeft = (hs.scrollWidth - hs.clientWidth) / 2;
+    applyZoom(false); // при увеличении схема шире окна — показываем её центр (там лучшие места)
   }
 
   function open3D(page, show, movie, priceFor, total, goNext) {
@@ -410,13 +450,13 @@
       <div class="sheet">
         <button class="handle-btn" aria-expanded="true" aria-label="${t('sheet_hide')}"><span class="handle"></span></button>
         <div class="sheet-mini">
-          <div class="mini-txt"><b>${t('row_seat', { r: rows[r], s: i + 1 })}</b><span>${inf.dist.toFixed(1)} м · ${inf.fov}°</span></div>
+          <div class="mini-txt"><b>${t('row_seat', { r: r + 1, s: i + 1 })}</b><span>${inf.dist.toFixed(1)} м · ${inf.fov}°</span></div>
           <button class="btn btn-white btn-sm" data-act="next">${money(total())} <svg class="ico" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
         </div>
         <div class="sheet-body">
         <div class="sheet-head">
           <div><span class="kicker">${t(inf.kind)}</span>
-            <h2>${t('row_seat', { r: rows[r], s: i + 1 })}</h2>
+            <h2>${t('row_seat', { r: r + 1, s: i + 1 })}</h2>
             <span class="sub">${isVip(r) ? 'VIP' : t('standard')} · ${money(priceFor(r, i))}</span></div>
           <svg class="minimap" viewBox="0 0 64 54" aria-hidden="true"><path d="M4 6 Q32 0 60 6" fill="none" stroke="#bdbac2"/>
             ${rows.split('').map((_, rr) => [...Array(14)].map((__, ii) => {
@@ -543,7 +583,7 @@
         const sel = isVip(r) ? `<span class="tfixed">VIP</span>`
           : `<select data-seat="${name}" aria-label="${t('ticket_type')}">${['adult', 'child', 'student'].filter((k) => show.prices[k] != null)
             .map((k) => `<option value="${k}" ${k === ty ? 'selected' : ''}>${t('t_' + k)}</option>`).join('')}</select>`;
-        return `<div class="co-seat"><span>${t('row_seat', { r: rows[r], s: i + 1 })}</span>${sel}<b>${money(priceOf(r, i))}</b></div>`;
+        return `<div class="co-seat"><span>${t('row_seat', { r: r + 1, s: i + 1 })}</span>${sel}<b>${money(priceOf(r, i))}</b></div>`;
       }).join('');
       $$('select[data-seat]').forEach((s) => s.addEventListener('change', () => { S.order.types[s.dataset.seat] = s.value; saveOrder(); drawSeats(); }));
       $('#coTotal').textContent = money(total());
@@ -629,7 +669,7 @@
     const m = b.movie, s = b.show;
     const rows = b.seats.map((x) => {
       const { r, i } = seatParse(x.seat);
-      return `<li><span>${t('row_seat', { r: S.cat.layout.rows[r], s: i + 1 })}</span><span class="muted">${t('t_' + x.ticket_type)}</span><b>${money(x.price)}</b></li>`;
+      return `<li><span>${t('row_seat', { r: r + 1, s: i + 1 })}</span><span class="muted">${t('t_' + x.ticket_type)}</span><b>${money(x.price)}</b></li>`;
     }).join('');
     return `<div class="ticket ${big ? 'big' : ''}">
       <div class="t-top">${poster(m, 'xs')}<div><h3>${esc(L(m.title))} <span class="age">${m.age}+</span></h3><p class="muted">${showLine(s)}</p></div></div>
