@@ -201,6 +201,13 @@ def _body() -> dict:
     return data if isinstance(data, dict) else {}
 
 
+@app.get("/api/health")
+def health():
+    """Служебная проверка: какая база подключена (без адресов и паролей)."""
+    configured = bool(os.environ.get("DATABASE_URL", "").strip())
+    return jsonify(ok=True, db=dbconn.DB_KIND, database_url_set=configured)
+
+
 @app.get("/api/me")
 def me():
     return jsonify(user=user_json(current_user()))

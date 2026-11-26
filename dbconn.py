@@ -10,8 +10,15 @@ import os
 import re
 import sqlite3
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-IS_PG = DATABASE_URL.startswith(("postgres://", "postgresql://"))
+def _clean_url(raw: str) -> str:
+    """Достать адрес базы из того, что вставили: убрать кавычки, «psql», пробелы и т. п."""
+    m = re.search(r"postgres(?:ql)?://[^\s'\"`]+", raw or "")
+    return m.group(0) if m else ""
+
+
+DATABASE_URL = _clean_url(os.environ.get("DATABASE_URL", ""))
+IS_PG = bool(DATABASE_URL)
+DB_KIND = "postgresql" if IS_PG else "sqlite"
 
 if IS_PG:
     import psycopg
