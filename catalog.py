@@ -151,6 +151,24 @@ MOVIES = [
     },
 ]
 MOVIES_BY_ID = {m["id"]: m for m in MOVIES}
+SEED_MOVIES = MOVIES  # начальное наполнение базы; дальше фильмы редактируются в админ-панели
+
+AGES = (0, 6, 12, 14, 16, 18, 21)
+LANGS = ("KAZ", "RUS", "ENG")
+MOTIFS = ("sun", "rails", "planet", "dune", "confetti", "city", "cloud", "mask")
+
+# базовые цены (тенге); меняются в админ-панели
+DEFAULT_PRICES = {
+    "morning": 1400,   # до 12:00
+    "day": 1600,       # 12:00–17:00
+    "evening": 1800,   # 17:00–21:00
+    "night": 2200,     # после 21:00
+    "imax_extra": 400,
+    "child_discount": 700,
+    "student_discount": 300,
+    "vip_day": 2800,
+    "vip_evening": 3500,
+}
 
 TICKET_TYPES = ("adult", "child", "student", "vip")
 
@@ -159,10 +177,10 @@ def release_of(movie: dict) -> date | None:
     return date.fromisoformat(movie["release"]) if movie.get("release") else None
 
 
-def days_for(today: date) -> list[date]:
+def days_for(today: date, movies: list[dict]) -> list[date]:
     """Ближайшие 14 дней + первые дни проката фильмов в предпродаже (например, премьера через месяц)."""
     days = [today + timedelta(days=i) for i in range(DAYS_AHEAD)]
-    for m in MOVIES:
+    for m in movies:
         rel = release_of(m)
         if rel and today < rel <= today + timedelta(days=PRESALE_HORIZON):
             for k in range(PRESALE_DAYS):
@@ -172,31 +190,34 @@ def days_for(today: date) -> list[date]:
     return sorted(days)
 
 
-def prices_for(start: time, hall: int, movie: dict) -> dict:
+def prices_for(start: time, hall: int, movie: dict, cfg: dict | None = None) -> dict:
     """Цены зависят от времени сеанса и зала; детский билет — только для фильмов до 16+ и до 21:00."""
+    p = {**DEFAULT_PRICES, **(cfg or {})}
     h = start.hour
     if h < 2:          # ночные сеансы после полуночи
-        adult = 2200
+        adult = p["night"]
     elif h < 12:
-        adult = 1400
+        adult = p["morning"]
     elif h < 17:
-        adult = 1600
+        adult = p["day"]
     elif h < 21:
-        adult = 1800
+        adult = p["evening"]
     else:
-        adult = 2200
+        adult = p["night"]
     if HALLS[hall]["format"] == "IMAX":
-        adult += 400
-    child = adult - 700 if movie["age"] < 16 and 2 <= h < 21 else None
-    student = adult - 300
-    vip = 2800 if 2 <= h < 17 else 3500
+        adult += p["imax_extra"]
+    child = max(0, adult - p["child_discount"]) if movie["age"] < 16 and 2 <= h < 21 else None
+    student = max(0, adult - p["student_discount"])
+    vip = p["vip_day"] if 2 <= h < 17 else p["vip_evening"]
     return {"adult": adult, "child": child, "student": student, "vip": vip}
 
 
-def schedule_for(day: date) -> list[dict]:
-    """Детерминированное расписание на день: одинаковое при каждом запросе."""
+def generate_day(day: date, movies: list[dict], cfg: dict | None = None) -> list[dict]:
+    """Автозаполнение расписания на день (детерминированно). Результат сохраняется в базе и дальше не меняется сам."""
     rng = random.Random(day.toordinal() * 7919)
-    playing = [m for m in MOVIES if not release_of(m) or release_of(m) <= day]
+    playing = [m for m in movies if not release_of(m) or release_of(m) <= day]
+    if not playing:
+        return []
     # в первые дни проката громкой премьеры она идёт в большинстве сеансов
     premieres = [m for m in playing if release_of(m) and (day - release_of(m)).days < PRESALE_DAYS]
     shows = []
@@ -226,20 +247,12 @@ def schedule_for(day: date) -> list[dict]:
                 "time": f"{start:%H:%M}",
                 "lang": lang,
                 "format": HALLS[hall]["format"],
-                "prices": prices_for(start.time(), hall, movie),
+                "prices": prices_for(start.time(), hall, movie, cfg),
             })
             t = start + timedelta(minutes=movie["duration"] + rng.choice((15, 20, 25)))
     shows.sort(key=lambda s: (s["starts_at"], s["hall"]))
     return shows
 
-
-def find_showtime(showtime_id: str) -> dict | None:
-    try:
-        day_s, _hall, _hhmm = showtime_id.split("-")
-        day = datetime.strptime(day_s, "%Y%m%d").date()
-    except ValueError:
-        return None
-    return next((s for s in schedule_for(day) if s["id"] == showtime_id), None)
 
 
 def valid_seat(seat: str) -> bool:

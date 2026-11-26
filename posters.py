@@ -21,7 +21,7 @@ IMG = "https://image.tmdb.org/t/p/w500"
 TTL_OK = 12 * 3600      # удачный результат кешируется на 12 часов
 TTL_FAIL = 10 * 60      # ошибка — на 10 минут
 
-_cache: dict[int, tuple[float, dict]] = {}
+_cache: dict[tuple, tuple[float, dict]] = {}
 _lock = threading.Lock()
 
 
@@ -68,14 +68,32 @@ def _lookup(movie: dict) -> dict:
             info["runtime"] = details["runtime"]
     except Exception:
         pass
+    trailer = _trailer(hit["id"])
+    if trailer:
+        info["trailer"] = trailer
     return info
+
+
+def _trailer(tmdb_id: int) -> str | None:
+    """Официальный трейлер на YouTube: сначала русский, потом английский."""
+    for lang in ("ru-RU", "en-US"):
+        try:
+            vids = _get(f"/movie/{tmdb_id}/videos", {"language": lang}).get("results") or []
+        except Exception:
+            continue
+        yt = [v for v in vids if v.get("site") == "YouTube" and v.get("type") in ("Trailer", "Teaser")]
+        yt.sort(key=lambda v: (not v.get("official"), v.get("type") != "Trailer"))
+        if yt:
+            return yt[0]["key"]
+    return None
 
 
 def _one(movie: dict) -> tuple[int, dict]:
     mid = movie["id"]
+    ck = (mid, movie["tmdb"].get("query"), movie["tmdb"].get("year"))  # запрос изменили в админке — ищем заново
     now = time.time()
     with _lock:
-        hit = _cache.get(mid)
+        hit = _cache.get(ck)
         if hit and hit[0] > now:
             return mid, hit[1]
     try:
@@ -84,7 +102,7 @@ def _one(movie: dict) -> tuple[int, dict]:
     except Exception:
         info, ttl = {}, TTL_FAIL
     with _lock:
-        _cache[mid] = (now + ttl, info)
+        _cache[ck] = (now + ttl, info)
     return mid, info
 
 

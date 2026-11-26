@@ -24,6 +24,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import catalog as C
 import posters
+import store
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -112,8 +113,10 @@ def _close_db(_exc):
 
 def init_db() -> None:
     conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
     conn.execute("PRAGMA journal_mode = WAL")
+    store.init(conn)
     conn.close()
 
 
@@ -163,8 +166,21 @@ def current_user():
     return db().execute("SELECT id, name, email, phone, created_at FROM users WHERE id = ?", (uid,)).fetchone()
 
 
+def admin_emails() -> set[str]:
+    """Администраторы задаются переменной окружения ADMIN_EMAILS (через запятую)."""
+    return {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
+
+
+def is_admin(row) -> bool:
+    return bool(row) and row["email"].lower() in admin_emails()
+
+
 def user_json(row) -> dict | None:
-    return dict(row) if row else None
+    if not row:
+        return None
+    u = dict(row)
+    u["is_admin"] = is_admin(row)
+    return u
 
 
 # ---------- Авторизация ----------
@@ -238,18 +254,18 @@ def logout():
 
 # ---------- Каталог и расписание ----------
 def _day_range() -> list[date]:
-    return C.days_for(now().date())
+    return store.days(db(), now().date())
 
 
 @app.get("/api/posters")
 def posters_view():
-    """Официальные постеры и длительность с TMDB (пусто, если ключ не задан)."""
-    data = posters.for_movies(C.MOVIES)
+    """Официальные постеры, длительность и трейлеры с TMDB (пусто, если ключ не задан)."""
+    data = posters.for_movies([m for m in store.movies(db()) if m.get("tmdb") and m["tmdb"].get("query")])
     resp = jsonify(
         enabled=posters.enabled(),
-        movies={str(mid): {k: v for k, v in info.items() if k in ("poster", "runtime")} for mid, info in data.items()},
+        movies={str(mid): {k: v for k, v in info.items() if k in ("poster", "runtime", "trailer")} for mid, info in data.items()},
     )
-    resp.headers["Cache-Control"] = "public, max-age=3600"
+    resp.headers["Cache-Control"] = "public, max-age=600"
     return resp
 
 
@@ -264,7 +280,7 @@ def catalog_view():
     return jsonify(
         cinema=C.CINEMA,
         halls=C.HALLS,
-        movies=C.MOVIES,
+        movies=store.movies(db()),
         days=[d.isoformat() for d in _day_range()],
         layout={"rows": C.ROWS, "seats": C.SEATS_PER_ROW, "vip_rows": sorted(C.VIP_ROWS), "max_seats": C.MAX_SEATS_PER_ORDER},
     )
@@ -278,7 +294,7 @@ def schedule():
         day = now().date()
     if day not in _day_range():
         return err("bad_date")
-    return jsonify(date=day.isoformat(), shows=[_with_state(s) for s in C.schedule_for(day)])
+    return jsonify(date=day.isoformat(), shows=[_with_state(s) for s in store.shows_for_day(db(), day)])
 
 
 def _taken(showtime_id: str) -> list[str]:
@@ -288,10 +304,10 @@ def _taken(showtime_id: str) -> list[str]:
 
 @app.get("/api/showtimes/<showtime_id>")
 def showtime(showtime_id):
-    show = C.find_showtime(showtime_id)
+    show = store.find_show(db(), showtime_id)
     if not show:
         return err("not_found", 404)
-    return jsonify(show=_with_state(show), movie=C.MOVIES_BY_ID[show["movie_id"]], taken=_taken(showtime_id))
+    return jsonify(show=_with_state(show), movie=store.movie(db(), show["movie_id"]), taken=_taken(showtime_id))
 
 
 # ---------- Демо-оплата и бронирование ----------
@@ -345,7 +361,7 @@ def booking_json(row) -> dict:
     seats = db().execute(
         "SELECT seat, ticket_type, price FROM booking_seats WHERE booking_id = ? ORDER BY seat", (row["id"],)
     ).fetchall()
-    show = C.find_showtime(row["showtime_id"])
+    show = store.find_show(db(), row["showtime_id"], include_cancelled=True)
     return {
         "code": row["code"],
         "total": row["total"],
@@ -354,7 +370,7 @@ def booking_json(row) -> dict:
         "created_at": row["created_at"],
         "seats": [dict(s) for s in seats],
         "show": _with_state(show) if show else None,
-        "movie": C.MOVIES_BY_ID.get(show["movie_id"]) if show else None,
+        "movie": store.movie(db(), show["movie_id"]) if show else None,
     }
 
 
@@ -364,7 +380,7 @@ def create_booking():
     if not user:
         return err("auth_required", 401)
     d = _body()
-    show = C.find_showtime(str(d.get("showtime_id", "")))
+    show = store.find_show(db(), str(d.get("showtime_id", "")))
     if not show:
         return err("not_found", 404)
     if datetime.fromisoformat(show["starts_at"]) <= now():
@@ -435,6 +451,65 @@ def one_booking(code):
     if not row:
         return err("not_found", 404)
     return jsonify(booking=booking_json(row))
+
+
+# ---------- Избранное и напоминания о премьере ----------
+@app.get("/api/me/lists")
+def my_lists():
+    user = current_user()
+    if not user:
+        return err("auth_required", 401)
+    return jsonify(store.user_lists(db(), user["id"]))
+
+
+def _toggle(table: str):
+    user = current_user()
+    if not user:
+        return err("auth_required", 401)
+    d = _body()
+    try:
+        movie_id = int(d.get("movie_id"))
+    except (TypeError, ValueError):
+        return err("not_found", 404)
+    if not store.movie(db(), movie_id):
+        return err("not_found", 404)
+    store.toggle(db(), table, user["id"], movie_id, bool(d.get("on")))
+    return jsonify(store.user_lists(db(), user["id"]))
+
+
+@app.post("/api/favorites")
+def toggle_favorite():
+    return _toggle("favorites")
+
+
+@app.post("/api/reminders")
+def toggle_reminder():
+    return _toggle("reminders")
+
+
+@app.get("/api/notifications")
+def notifications():
+    user = current_user()
+    if not user:
+        return jsonify(items=[])
+    return jsonify(items=store.due_reminders(db(), user["id"], now().date()))
+
+
+@app.post("/api/notifications/seen")
+def notifications_seen():
+    user = current_user()
+    if not user:
+        return err("auth_required", 401)
+    items = _body().get("items")
+    if isinstance(items, list):
+        store.mark_notified(db(), user["id"], [i for i in items[:50] if isinstance(i, dict)])
+    return jsonify(ok=True)
+
+
+import admin  # noqa: E402
+
+admin.setup(db=db, now=now, err=err, body=_body, current_user=current_user, is_admin=is_admin)
+app.register_blueprint(admin.bp)
 
 
 @app.errorhandler(404)

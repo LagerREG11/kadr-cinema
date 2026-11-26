@@ -98,7 +98,8 @@
   const tmdb = (m) => (S.posters && S.posters[m.id]) || {};
   const runtime = (m) => tmdb(m).runtime || null;
   const durText = (m) => (runtime(m) ? t('min', { n: runtime(m) }) : '');
-  const posterImg = (m) => (tmdb(m).poster ? `<img src="${esc(tmdb(m).poster)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : '');
+  const posterSrc = (m) => m.poster_url || tmdb(m).poster || '';
+  const posterImg = (m) => (posterSrc(m) ? `<img src="${esc(posterSrc(m))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : '');
   function poster(m, cls = '') {
     const id = `pg${m.id}`;
     return `<div class="poster ${cls}" data-mid="${m.id}" aria-hidden="true">
@@ -116,7 +117,7 @@
   function hydratePosters() {
     $$('.poster[data-mid]').forEach((el) => {
       const m = movieById(Number(el.dataset.mid));
-      if (m && tmdb(m).poster && !el.querySelector('img')) el.querySelector('.age-badge').insertAdjacentHTML('beforebegin', posterImg(m));
+      if (m && posterSrc(m) && !el.querySelector('img')) el.querySelector('.age-badge').insertAdjacentHTML('beforebegin', posterImg(m));
     });
     $$('[data-dur]').forEach((el) => {
       const m = movieById(Number(el.dataset.dur));
@@ -126,11 +127,129 @@
       const m = movieById(Number(el.dataset.durPlain));
       if (m && runtime(m)) el.textContent = durText(m);
     });
+    $$('[data-trailer]').forEach((el) => {
+      const m = movieById(Number(el.dataset.trailer));
+      el.hidden = !(m && trailerOf(m));
+    });
     const foot = $('.foot');
     if (S.tmdbOn && foot && !foot.textContent) foot.innerHTML = `<p>${t('tmdb_note')} <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a>. This product uses the TMDB API but is not endorsed or certified by TMDB.</p>`;
   }
   const todayIso = () => S.cat.days[0];
   const isPresale = (m) => !!(m.release && m.release > todayIso());
+
+  // ---------- Трейлер ----------
+  const trailerOf = (m) => m.trailer || tmdb(m).trailer || null;
+  function openTrailer(id) {
+    const m = movieById(Number(id));
+    const key = m && trailerOf(m);
+    if (!key || !/^[\w-]{11}$/.test(key)) return;
+    const box = document.createElement('div');
+    box.className = 'modal';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', t('watch_trailer'));
+    box.innerHTML = `<div class="modal-in">
+        <button class="icon-btn modal-x" aria-label="${t('close')}"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="video"><iframe src="https://www.youtube-nocookie.com/embed/${key}?autoplay=1&rel=0" title="${esc(L(m.title))}"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+        <p class="muted small">${esc(L(m.title))} · YouTube</p>
+      </div>`;
+    const close = () => { box.remove(); document.body.classList.remove('no-scroll'); document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    box.addEventListener('click', (e) => { if (e.target === box || e.target.closest('.modal-x')) close(); });
+    document.addEventListener('keydown', onKey);
+    document.body.append(box);
+    document.body.classList.add('no-scroll');
+    $('.modal-x', box).focus();
+  }
+
+  // ---------- Избранное и напоминания ----------
+  S.lists = { favorites: [], reminders: [] };
+  const inList = (kind, id) => S.lists[kind].includes(Number(id));
+  const HEART = '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-9-9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c-2 4.6-9 9-9 9z"/></svg>';
+  const BELL = '<svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0"/></svg>';
+  const favBtn = (m, big) => `<button class="fav-btn${big ? ' big' : ''}${inList('favorites', m.id) ? ' on' : ''}" data-fav="${m.id}"
+      aria-pressed="${inList('favorites', m.id)}" aria-label="${t('favorite')}" title="${t('favorite')}">${HEART}${big ? `<span>${t('favorite')}</span>` : ''}</button>`;
+  const remindBtn = (m) => `<button class="remind-btn${inList('reminders', m.id) ? ' on' : ''}" data-remind="${m.id}" aria-pressed="${inList('reminders', m.id)}">
+      ${BELL}<span>${inList('reminders', m.id) ? t('remind_on') : t('remind')}</span></button>`;
+
+  async function loadLists() {
+    if (!S.user) { S.lists = { favorites: [], reminders: [] }; return; }
+    try { S.lists = await api('/me/lists'); } catch { /* не критично */ }
+  }
+  function syncListButtons() {
+    $$('[data-fav]').forEach((b) => { const on = inList('favorites', b.dataset.fav); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+    $$('[data-remind]').forEach((b) => {
+      const on = inList('reminders', b.dataset.remind);
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+      const sp = $('span', b); if (sp) sp.textContent = on ? t('remind_on') : t('remind');
+    });
+  }
+  async function toggleList(kind, id) {
+    if (!S.user) {
+      toast(t('login_for_lists'));
+      location.hash = `#/login?next=movie-${id}`;
+      return;
+    }
+    const on = !inList(kind, id);
+    try {
+      S.lists = await api(kind === 'favorites' ? '/favorites' : '/reminders', { method: 'POST', body: { movie_id: Number(id), on } });
+    } catch (e) { toast(errMsg(e)); return; }
+    syncListButtons();
+    if (kind === 'reminders' && on) {
+      toast(t('remind_set'));
+      // системные уведомления браузера (если пользователь разрешит)
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
+    } else if (kind === 'favorites') {
+      toast(on ? t('fav_added') : t('fav_removed'));
+    }
+  }
+  const listBlock = (kind, title, empty) => {
+    const items = S.lists[kind].map(movieById).filter(Boolean);
+    return `<section class="card list-card"><h3>${title}</h3>${items.length
+      ? `<div class="mini-list">${items.map((m) => `<a class="mini-movie" href="#/movie/${m.id}">${poster(m, 'xs')}
+          <span><b>${esc(L(m.title))}</b><small>${m.release && isPresale(m) ? `${t('premiere')}: ${fmtDay(m.release)}` : esc(L(m.genre))}</small></span></a>`).join('')}</div>`
+      : `<p class="muted small">${empty}</p>`}</section>`;
+  };
+
+  // напоминания о премьере: проверяются при входе и каждые 15 минут, пока сайт открыт
+  async function checkNotifications() {
+    if (!S.user) return;
+    let items;
+    try { ({ items } = await api('/notifications')); } catch { return; }
+    if (!items || !items.length) return;
+    items.forEach((it) => {
+      const m = movieById(it.movie_id);
+      if (!m) return;
+      const msg = t('notif_' + it.stage, { m: L(m.title) });
+      showBanner(msg, m);
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try { new Notification('KADR Cinema', { body: msg, icon: '/icon.svg', tag: `rem-${m.id}-${it.stage}` }); } catch { /* мобильные браузеры */ }
+      }
+    });
+    api('/notifications/seen', { method: 'POST', body: { items } }).catch(() => {});
+  }
+  function showBanner(msg, m) {
+    const b = document.createElement('div');
+    b.className = 'banner';
+    b.setAttribute('role', 'status');
+    b.innerHTML = `${BELL}<span>${esc(msg)}</span><a class="btn btn-green btn-sm" href="#/movie/${m.id}">${t('buy_ticket')}</a>
+      <button class="icon-btn" aria-label="${t('close')}"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
+    b.addEventListener('click', (e) => { if (e.target.closest('button, a')) b.remove(); });
+    document.body.append(b);
+  }
+
+  // клики по кнопкам избранного, напоминаний и трейлера — на любой странице
+  document.addEventListener('click', (e) => {
+    const f = e.target.closest('[data-fav]'); if (f) { e.preventDefault(); toggleList('favorites', f.dataset.fav); return; }
+    const r = e.target.closest('[data-remind]'); if (r) { e.preventDefault(); toggleList('reminders', r.dataset.remind); return; }
+    const tr = e.target.closest('[data-trailer]'); if (tr) { e.preventDefault(); openTrailer(tr.dataset.trailer); }
+  });
+
+  async function reloadCatalog() {
+    S.cat = await api('/catalog');
+    S.sched = {};
+    catLoadedAt = Date.now();
+  }
 
   // ---------- Шапка и навигация ----------
   function updateChrome() {
@@ -138,9 +257,12 @@
     $$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
     $$('[data-lang]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.lang === S.lang)));
     const hash = location.hash || '#/';
-    const section = hash.startsWith('#/tickets') || hash.startsWith('#/ticket/') ? 'tickets'
+    const section = hash.startsWith('#/admin') ? 'admin'
+      : hash.startsWith('#/tickets') || hash.startsWith('#/ticket/') ? 'tickets'
       : hash.startsWith('#/profile') || hash.startsWith('#/login') || hash.startsWith('#/register') ? 'profile' : 'home';
     $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === section));
+    const an = $('#adminNav');
+    if (an) an.hidden = !(S.user && S.user.is_admin);
     const ub = $('#userBtn');
     if (S.user) {
       ub.href = '#/profile';
@@ -258,7 +380,7 @@
       return `<article class="mcard">
         <a href="#/movie/${m.id}" class="mposter">${poster(m, 'sm')}</a>
         <div class="mbody">
-          <a href="#/movie/${m.id}" class="mtitle"><h3>${esc(L(m.title))}</h3><span class="age">${m.age}+</span></a>
+          <div class="mtitle-row"><a href="#/movie/${m.id}" class="mtitle"><h3>${esc(L(m.title))}</h3><span class="age">${m.age}+</span></a>${favBtn(m)}</div>
           <p class="meta">${isPresale(m) ? `<span class="presale">${t('presale')}</span> ` : ''}${esc(L(m.genre))}<span data-dur="${m.id}">${runtime(m) ? ` · ${durText(m)}` : ''}</span></p>
           <div class="stable">${sessHead(t('col_hall'))}${ss.map((s) => sessRow(s, `${S.cat.halls[s.hall].name} · ${s.format}`)).join('')}</div>
         </div>
@@ -303,6 +425,11 @@
         ${poster(m, 'lg')}
         <div class="movie-info">
           <h1>${esc(L(m.title))} <span class="age">${m.age}+</span></h1>
+          <div class="m-actions">
+            <button class="btn btn-white btn-sm" data-trailer="${m.id}" ${trailerOf(m) ? '' : 'hidden'}><svg class="ico" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/></svg>${t('watch_trailer')}</button>
+            ${favBtn(m, true)}
+            ${isPresale(m) ? remindBtn(m) : ''}
+          </div>
           <dl class="facts">
             <div><dt>${t('genre')}</dt><dd>${esc(L(m.genre))}</dd></div>
             ${m.release && isPresale(m) ? `<div><dt>${t('premiere')}</dt><dd>${fmtDay(m.release)}</dd></div>` : ''}
@@ -751,7 +878,11 @@
   }
 
   // ---------- Вход, регистрация, профиль ----------
-  const nextHash = (q) => ({ checkout: '#/checkout', tickets: '#/tickets' }[q.get('next')] || '#/');
+  const nextHash = (q) => {
+    const n = q.get('next') || '';
+    if (/^movie-\d+$/.test(n)) return `#/movie/${n.slice(6)}`;
+    return ({ checkout: '#/checkout', tickets: '#/tickets', admin: '#/admin', profile: '#/profile' })[n] || '#/';
+  };
 
   function authForm(page, q, kind) {
     page.className = 'auth';
@@ -796,7 +927,9 @@
         const { user } = await api(reg ? '/register' : '/login', { method: 'POST', body: fd });
         S.user = user;
         toast(t('welcome', { n: user.name.split(' ')[0] }));
+        await loadLists();
         location.hash = nextHash(q);
+        checkNotifications();
       } catch (err) {
         $('.form-err', form).textContent = errMsg(err);
         btn.disabled = false;
@@ -815,12 +948,16 @@
         <h1>${esc(u.name)}</h1>
         <p class="muted">${esc(u.email)}${u.phone ? ' · ' + esc(u.phone) : ''}</p>
         <p class="muted small">${t('member_since', { d: fmtDay(u.created_at.slice(0, 10)) })}</p>
+        ${u.is_admin ? `<a class="btn btn-green btn-block" href="#/admin">${t('admin_panel')}</a>` : ''}
         <a class="btn btn-white btn-block" href="#/tickets">${t('my_tickets')}</a>
         <button class="btn btn-ghost-b btn-block" id="logoutBtn">${t('logout')}</button>
-      </div>`;
+      </div>
+      ${listBlock('favorites', t('favorites'), t('no_favorites'))}
+      ${listBlock('reminders', t('reminders'), t('no_reminders'))}`;
     $('#logoutBtn').addEventListener('click', async () => {
       await api('/logout', { method: 'POST', body: {} }).catch(() => {});
       S.user = null;
+      S.lists = { favorites: [], reminders: [] };
       toast(t('bye'));
       location.hash = '#/';
     });
@@ -842,6 +979,11 @@
     [/^\/login$/, (p, q) => (S.user ? (location.hash = nextHash(q)) : authForm(p, q, 'login'))],
     [/^\/register$/, (p, q) => (S.user ? (location.hash = nextHash(q)) : authForm(p, q, 'register'))],
     [/^\/profile$/, pageProfile],
+    [/^\/admin$/, (p, q) => {
+      if (!S.user) { location.hash = '#/login?next=admin'; return; }
+      if (!S.user.is_admin || !window.AdminPage) return notFound(p, t('err_forbidden'));
+      return window.AdminPage(p, q);
+    }],
   ];
 
   let routeSeq = 0;
@@ -895,6 +1037,9 @@
     <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".75"/></linearGradient>
   </defs></svg>`);
 
+  // общие функции для admin.js
+  window.KADR = { api, S, t, L, esc, money, toast, poster, fmtDay, movieById, langLabel, errMsg, fresh, reloadCatalog, $, $$ };
+
   (async () => {
     updateChrome();
     try {
@@ -906,7 +1051,10 @@
       $('#page').innerHTML = `<div class="card center"><p>${esc(errMsg(e))}</p></div>`;
       return;
     }
+    await loadLists();
     route();
+    checkNotifications();
+    setInterval(checkNotifications, 15 * 60 * 1000);
     // официальные постеры грузятся отдельно, чтобы не задерживать открытие сайта
     api('/posters').then((p) => {
       S.tmdbOn = !!p.enabled;
