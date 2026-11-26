@@ -97,10 +97,17 @@
     return tx;
   }
 
-  function buildScene() {
+  const MOODS = {
+    day: { hemi: 1.05, spot: 2.2, fill: 0.9, wall: 0.9, sconce: 0xffe0b8, dots: 0xfff1d6, led: 0xc08a4a, exposure: 1.3, bg: 0x0d0909 },
+    evening: { hemi: 0.65, spot: 2.6, fill: 0.4, wall: 0.5, sconce: 0xffc98a, dots: 0xffe2b8, led: 0xffb35c, exposure: 1.15, bg: 0x060405 },
+    night: { hemi: 0.2, spot: 2.1, fill: 0.1, wall: 0.12, sconce: 0x4a2c18, dots: 0x2a1d14, led: 0xffa640, exposure: 0.95, bg: 0x030203 },
+  };
+
+  function buildScene(moodName) {
+    const M = MOODS[moodName] || MOODS.evening;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x060405);
-    scene.fog = new THREE.Fog(0x060405, 18, 38);
+    scene.background = new THREE.Color(M.bg);
+    scene.fog = new THREE.Fog(M.bg, 18, 38);
 
     // ---- экран: рамка, свечение, сцена и занавес ----
     const screenMat = new THREE.MeshBasicMaterial({ map: desertTexture(), toneMapped: false });
@@ -133,12 +140,12 @@
     });
 
     // ---- свет ----
-    scene.add(new THREE.HemisphereLight(0x4a2a26, 0x0a0607, 0.65));
-    const spot = new THREE.SpotLight(0xffe4cc, 2.6, 32, Math.PI / 3, 0.75, 1.3);
+    scene.add(new THREE.HemisphereLight(0x4a2a26, 0x0a0607, M.hemi));
+    const spot = new THREE.SpotLight(0xffe4cc, M.spot, 32, Math.PI / 3, 0.75, 1.3);
     spot.position.set(0, SCREEN_BOTTOM + SCREEN_H / 2, 0.8);
     spot.target.position.set(0, 0, 10);
     scene.add(spot, spot.target);
-    const fill = new THREE.PointLight(0xff4a35, 0.4, 22);
+    const fill = new THREE.PointLight(0xff4a35, M.fill, 22);
     fill.position.set(0, 6, 14);
     scene.add(fill);
 
@@ -158,7 +165,7 @@
     floor.position.set(0, 0, 10);
     scene.add(floor);
     const aisles = [(seatX(2) + seatX(3)) / 2, (seatX(10) + seatX(11)) / 2];
-    const ledMat = new THREE.MeshBasicMaterial({ color: 0xffb35c, toneMapped: false });
+    const ledMat = new THREE.MeshBasicMaterial({ color: M.led, toneMapped: false });
     const ledGeo = new THREE.BoxGeometry(AISLE * 0.7, 0.025, 0.03);
     for (let r = 1; r < ROWS; r++) {
       const h = rowY(r);
@@ -176,7 +183,7 @@
     // ---- стены: тканевые панели и бра; потолок со светильниками ----
     const wallMat = new THREE.MeshStandardMaterial({ color: 0x1c0a0c, roughness: 0.95 });
     const panelMat = new THREE.MeshStandardMaterial({ color: 0x2e0d12, roughness: 0.9 });
-    const sconceMat = new THREE.MeshBasicMaterial({ color: 0xffc98a, toneMapped: false });
+    const sconceMat = new THREE.MeshBasicMaterial({ color: M.sconce, toneMapped: false });
     const panelGeo = new THREE.BoxGeometry(0.08, 4.2, 1.35);
     const sconceGeo = new THREE.BoxGeometry(0.06, 0.32, 0.16);
     [-1, 1].forEach((side) => {
@@ -194,7 +201,7 @@
         scene.add(sc);
       }
       [7, 14].forEach((z) => {
-        const l = new THREE.PointLight(0xffb070, 0.5, 7, 2);
+        const l = new THREE.PointLight(0xffb070, M.wall, 7, 2);
         l.position.set(wx - side * 0.5, 5.4, z);
         scene.add(l);
       });
@@ -204,7 +211,7 @@
     ceil.position.set(0, 9.5, 10);
     scene.add(ceil);
     const dotGeo = new THREE.CircleGeometry(0.07, 10);
-    const dotMat = new THREE.MeshBasicMaterial({ color: 0xffe2b8, toneMapped: false });
+    const dotMat = new THREE.MeshBasicMaterial({ color: M.dots, toneMapped: false });
     for (let x = -6; x <= 6; x += 2) {
       for (let z = 4; z <= 18; z += 2.4) {
         const d = new THREE.Mesh(dotGeo, dotMat);
@@ -264,7 +271,7 @@
         seats.set(`${r}-${i}`, g);
       }
     }
-    return { scene, seats, mats };
+    return { scene, seats, mats, screen, screenMat, exposure: M.exposure };
   }
 
   let ctx = null;
@@ -276,6 +283,7 @@
     const w = c.clientWidth, h = c.clientHeight;
     if (!w || !h) return;
     ctx.renderer.setSize(w, h, false);
+    if (ctx.css) ctx.css.renderer.setSize(w, h);
     ctx.camera.aspect = w / h;
     ctx.camera.updateProjectionMatrix();
   }
@@ -302,14 +310,14 @@
    */
   function open(canvas, opts) {
     close();
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
     const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 80);
-    const built = buildScene();
-    ctx = { renderer, camera, ...built, raf: 0 };
+    const built = buildScene(opts.mood);
+    renderer.toneMappingExposure = built.exposure;
+    ctx = { renderer, camera, ...built, raf: 0, css: null };
     window.addEventListener('resize', resize);
     bindDrag(canvas, opts.onDrag);
     resize();
@@ -365,13 +373,55 @@
       }
       camera.lookAt(tgt);
       renderer.render(ctx.scene, camera);
+      if (ctx.css) ctx.css.renderer.render(ctx.css.scene, camera);
       ctx.raf = requestAnimationFrame(frame);
     };
     ctx.raf = requestAnimationFrame(frame);
   }
 
+  // ---- трейлер на экране зала: iframe YouTube в CSS3D-слое под прозрачным «окном» в WebGL ----
+  const canTrailer = () => typeof window.THREE !== 'undefined' && !!THREE.CSS3DRenderer;
+  function setTrailer(key) {
+    if (!ctx || !canTrailer()) return;
+    const canvas = ctx.renderer.domElement;
+    if (ctx.css) {
+      ctx.css.renderer.domElement.remove();
+      ctx.css = null;
+    }
+    if (!key || !/^[\w-]{11}$/.test(key)) {
+      ctx.screen.material = ctx.screenMat;
+      return;
+    }
+    const W = 1280, H = Math.round(W * SCREEN_H / SCREEN_W);
+    const el = document.createElement('div');
+    el.style.width = W + 'px';
+    el.style.height = H + 'px';
+    el.style.background = '#000';
+    const frame = document.createElement('iframe');
+    frame.src = `https://www.youtube-nocookie.com/embed/${key}?autoplay=1&mute=1&controls=0&loop=1&playlist=${key}&playsinline=1&rel=0&modestbranding=1`;
+    frame.allow = 'autoplay; encrypted-media';
+    // YouTube требует адрес сайта-источника (иначе «ошибка настройки плеера»)
+    frame.referrerPolicy = 'strict-origin-when-cross-origin';
+    frame.style.cssText = `width:${W}px;height:${H}px;border:0;display:block`;
+    el.appendChild(frame);
+    const obj = new THREE.CSS3DObject(el);
+    obj.position.copy(ctx.screen.position);
+    obj.scale.setScalar(SCREEN_W / W);
+    const scene = new THREE.Scene();
+    scene.add(obj);
+    const renderer = new THREE.CSS3DRenderer();
+    renderer.domElement.className = 'css3d-layer';
+    canvas.parentElement.insertBefore(renderer.domElement, canvas);
+    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+    ctx.css = { renderer, scene };
+    // «окно» в экране: прозрачные пиксели, сквозь которые виден трейлер; кресла перед экраном по-прежнему рисуются поверх
+    if (!ctx.holeMat) ctx.holeMat = new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0, transparent: false, blending: THREE.NoBlending, fog: false });
+    ctx.screen.material = ctx.holeMat;
+  }
+
   function close() {
     if (!ctx) return;
+    if (ctx.css) { ctx.css.renderer.domElement.remove(); ctx.css = null; }
     cancelAnimationFrame(ctx.raf);
     window.removeEventListener('resize', resize);
     ctx.scene.traverse((o) => {
@@ -385,6 +435,6 @@
 
   window.Hall3D = {
     available: () => typeof window.THREE !== 'undefined',
-    open, close, info,
+    open, close, info, setTrailer, canTrailer,
   };
 })();

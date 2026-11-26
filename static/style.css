@@ -788,3 +788,106 @@ a.sbtn:hover { background: var(--card-2); }
   .city-btn { max-width: 112px; }
   .city-list { grid-template-columns: 1fr; }
 }
+
+/* ===== Загруженность, время окончания, детский режим ===== */
+.send { display: block; font-size: 11px; color: var(--muted); font-style: normal; font-weight: 500; }
+.sbtn b .send { display: inline; font-size: 12px; }
+.occ { display: inline-block; margin-top: 3px; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px; letter-spacing: .02em; }
+.occ-free { background: rgba(95, 211, 141, .14); color: var(--green); }
+.occ-few { background: rgba(255, 196, 92, .15); color: #ffc45c; }
+.occ-last, .occ-full { background: rgba(255, 92, 92, .15); color: #ff7a7a; }
+.shall .occ { margin-left: 6px; }
+.kids-bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 0; }
+.chip-btn { border: 1px solid #343238; background: var(--card); color: var(--text); border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+.chip-btn:hover { background: var(--card-2); }
+.chip-btn.on { background: rgba(95, 211, 141, .14); border-color: rgba(95, 211, 141, .5); color: var(--green); }
+.rating { display: inline-block; color: #ffc45c; font-weight: 700; margin-right: 8px; }
+.rating small { color: var(--muted); font-weight: 500; }
+.m-rating { margin: -6px 0 10px; }
+.m-rating:empty { display: none; }
+/* детский режим: крупнее и ярче */
+body.kids { font-size: 16px; }
+body.kids .srow, body.kids .sbtn { padding: 12px 14px; }
+body.kids .stime { font-size: 18px; }
+body.kids .btn { padding: 14px 24px; font-size: 16px; }
+body.kids .seat { --kids: 1; }
+body.kids .mtitle h3 { font-size: 21px; }
+body.kids .logo-mark { background: linear-gradient(135deg, #ffcf5c, #ff7ab6); }
+
+/* ===== Места «вживую» ===== */
+.seat.held { background: repeating-linear-gradient(45deg, #4a3a1a 0 4px, #2d2412 4px 8px); color: transparent; }
+.dot.held { background: repeating-linear-gradient(45deg, #8a6a2a 0 2px, #3d2f12 2px 4px); }
+
+/* ===== Оплата: бонусы и сертификат ===== */
+.co-extras { padding: 12px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.co-opt { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.co-opt input { width: 18px; height: 18px; accent-color: var(--green); }
+.gift-apply { display: flex; gap: 8px; }
+.gift-apply input { flex: 1; min-width: 0; background: var(--card-2); border: 1px solid #343238; border-radius: 10px; padding: 9px 12px; font-size: 15px; color: var(--text); text-transform: uppercase; letter-spacing: .06em; }
+.co-lines { padding-top: 10px; }
+.co-line { display: flex; justify-content: space-between; font-size: 14px; color: #cfccd3; padding: 3px 0; }
+.co-line.minus span:last-child { color: var(--green); }
+.earn { color: var(--green); margin: 6px 0 0; }
+.t-extra { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 13px; color: #cfccd3; }
+.t-extra .earn { margin: 0; font-weight: 700; }
+
+/* ===== Отзывы ===== */
+.reviews { display: flex; flex-direction: column; gap: 12px; }
+.rv-sum { display: flex; align-items: baseline; gap: 10px; }
+.rv-sum b { font-size: 24px; color: #ffc45c; }
+.rv-form { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
+.rv-form textarea { background: var(--card-2); border: 1px solid #343238; border-radius: 12px; padding: 10px 12px; font-size: 15px; color: var(--text); resize: vertical; font-family: inherit; }
+.rv-form .btn { align-self: flex-start; }
+.rv-stars { display: flex; gap: 4px; }
+.rv-stars button { border: 0; background: none; font-size: 30px; line-height: 1; color: #3a383e; padding: 0 2px; transition: color .15s, transform .15s; }
+.rv-stars button.on { color: #ffc45c; }
+.rv-stars button:hover { transform: scale(1.12); }
+.rv-list { display: flex; flex-direction: column; gap: 8px; }
+.rv { background: var(--card); border-radius: 12px; padding: 10px 14px; }
+.rv-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rv-st { color: #ffc45c; letter-spacing: 1px; font-size: 13px; }
+.rv p { margin: 6px 0 0; font-size: 14px; color: #cfccd3; }
+.rv-del { margin-left: auto; border: 0; background: none; color: #ff7a7a; font-size: 14px; }
+.skeleton.small { height: 60px; }
+
+/* ===== Бонусы и значки ===== */
+.bonus-card .bc-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.bc-bal { display: block; font-size: 30px; color: var(--green); }
+.bc-bal small { font-size: 14px; color: var(--muted); font-weight: 500; }
+.bonus-card h3 { margin: 14px 0 8px; }
+.badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.badge-i { background: var(--card-2); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 2px; opacity: .38; filter: grayscale(1); }
+.badge-i.got { opacity: 1; filter: none; box-shadow: inset 0 0 0 1px rgba(95, 211, 141, .45); }
+.badge-i .bi { font-size: 24px; }
+.badge-i b { font-size: 13px; }
+.badge-i small { font-size: 11px; color: var(--muted); }
+
+/* ===== Подарочный сертификат ===== */
+.gift-form { display: flex; flex-direction: column; }
+.gift-form h3 { margin: 10px 0 10px; }
+.gift-form textarea { background: var(--card-2); border: 1px solid #343238; border-radius: 12px; padding: 11px 12px; font-size: 15px; color: var(--text); resize: vertical; font-family: inherit; }
+.amts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.giftcard {
+  position: relative; overflow: hidden; border-radius: 22px; padding: 22px;
+  background: radial-gradient(120% 100% at 0% 0%, #2f8f5a 0%, #12321f 45%, #0b0a0c 100%);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(95, 211, 141, .35);
+}
+.giftcard::after { content: ''; position: absolute; right: -40px; top: -40px; width: 180px; height: 180px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 207, 92, .35), transparent 70%); }
+.gc-top { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .04em; }
+.gc-hi { margin: 22px 0 4px; font-size: 18px; font-weight: 600; }
+.gc-amt { display: block; font-size: 44px; letter-spacing: -.02em; color: #fff; }
+.gc-msg { margin: 10px 0 0; font-size: 16px; color: #e9f7ef; font-style: italic; }
+.gc-from { margin: 6px 0 0; color: #b9d8c6; }
+.gc-code { margin-top: 18px; display: flex; flex-direction: column; gap: 2px; }
+.gc-code small { color: #b9d8c6; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.gc-code code { font-size: 22px; letter-spacing: .1em; color: #fff; }
+.gc-bal { margin: 14px 0 4px; }
+
+/* ===== 3D: настроение и трейлер ===== */
+.view-mood { position: absolute; top: max(16px, env(safe-area-inset-top)); right: 14px; font-size: 12px; background: rgba(20, 19, 22, .6); backdrop-filter: blur(10px); padding: 6px 10px; border-radius: 999px; color: #e9e6ec; }
+.view-trailer { position: absolute; top: calc(max(16px, env(safe-area-inset-top)) + 40px); right: 14px; background: rgba(20, 19, 22, .7); color: var(--text); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px #3a383e; }
+.view-trailer[aria-pressed="true"] { color: var(--green); box-shadow: inset 0 0 0 1px rgba(95, 211, 141, .6); }
+.css3d-layer { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.view canvas { position: relative; z-index: 1; }
+.view .view-close, .view .view-hint, .view .sheet, .view .view-mood, .view .view-trailer { z-index: 2; }
+@media (max-width: 760px) { .kids-bar .chip-btn { font-size: 12px; padding: 6px 11px; } }

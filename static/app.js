@@ -22,6 +22,8 @@
     lang: store.get('lang', 'kk'),
     mode: store.get('mode', 'movies'),
     city: store.get('city', null),
+    kids: store.get('kids', false),
+    sortFree: false,
     tab: 'schedule',
     user: null,
     cat: null,
@@ -136,6 +138,27 @@
     if (S.tmdbOn && foot && !foot.textContent) foot.innerHTML = `<p>${t('tmdb_note')} <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a>. This product uses the TMDB API but is not endorsed or certified by TMDB.</p>`;
   }
   const todayIso = () => S.cat.days[0];
+  // время окончания сеанса: начало + длительность фильма
+  const endTime = (show) => {
+    const m = movieById(show.movie_id);
+    const mins = (m && (runtime(m) || m.duration)) || 120;
+    const [hh, mm] = show.starts_at.slice(11, 16).split(':').map(Number);
+    const tot = (hh * 60 + mm + mins) % (24 * 60);
+    return `${String(Math.floor(tot / 60)).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+  };
+  // загруженность зала по числу свободных мест
+  const occBadge = (s) => {
+    if (s.past || s.free == null) return '';
+    if (s.free <= 0) return `<span class="occ occ-full">${t('occ_full')}</span>`;
+    if (s.free <= 5) return `<span class="occ occ-last">${t('occ_last', { n: s.free })}</span>`;
+    if (s.free <= 25) return `<span class="occ occ-few">${t('occ_few')}</span>`;
+    // «почти пусто» показываем только при сортировке по свободным местам, чтобы не было шума
+    if (S.sortFree && s.free >= 110) return `<span class="occ occ-free">${t('occ_free')}</span>`;
+    return '';
+  };
+  const ratingOf = (m) => (S.cat.ratings && S.cat.ratings[m.id]) || null;
+  const starsTxt = (m) => { const r = ratingOf(m); return r ? `<span class="rating">★ ${r.avg.toFixed(1)} <small>(${r.count})</small></span>` : ''; };
+  const kidsOk = (m) => !S.kids || m.age <= 6;
   const cityName = (id) => L(((S.cat && S.cat.cities) || []).find((c) => c.id === id)?.name) || '';
 
   // ---------- Выбор города ----------
@@ -307,6 +330,7 @@
     $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === section));
     const cb = $('#cityBtn');
     if (cb && S.cat) cb.querySelector('span').textContent = cityName(S.city || S.cat.default_city);
+    document.body.classList.toggle('kids', !!S.kids);
     const an = $('#adminNav');
     if (an) an.hidden = !(S.user && S.user.is_admin);
     const ub = $('#userBtn');
@@ -376,7 +400,7 @@
     if (S.tab === 'about') return renderAbout(body);
 
     // «Скоро в кино»: фильмы в предпродаже
-    const soon = S.cat.movies.filter(isPresale).sort((a, b) => a.release.localeCompare(b.release));
+    const soon = S.cat.movies.filter(isPresale).filter(kidsOk).sort((a, b) => a.release.localeCompare(b.release));
     if (soon.length) {
       const strip = document.createElement('section');
       strip.className = 'soon';
@@ -386,6 +410,14 @@
         </a>`).join('')}</div>`;
       body.append(strip);
     }
+    const kidsBar = document.createElement('div');
+    kidsBar.className = 'kids-bar';
+    kidsBar.innerHTML = `<button class="chip-btn${S.kids ? ' on' : ''}" id="kidsBtn" aria-pressed="${S.kids}">🧸 ${t('kids_mode')}</button>
+      <button class="chip-btn${S.sortFree ? ' on' : ''}" id="sortBtn" aria-pressed="${S.sortFree}">${t('sort_free')}</button>
+      <a class="chip-btn" href="#/gift">🎁 ${t('gift_title')}</a>`;
+    body.append(kidsBar);
+    $('#kidsBtn', kidsBar).addEventListener('click', () => { S.kids = !S.kids; store.set('kids', S.kids); updateChrome(); toast(S.kids ? t('kids_on') : t('kids_off')); pageHome(page); });
+    $('#sortBtn', kidsBar).addEventListener('click', () => { S.sortFree = !S.sortFree; pageHome(page); });
     body.append(dateStrip(() => pageHome(page)));
     const toggle = document.createElement('div');
     toggle.className = 'seg';
@@ -405,7 +437,8 @@
     let shows;
     try { shows = await loadSchedule(day); } catch (e) { if (ok()) list.innerHTML = `<p class="empty">${esc(errMsg(e))}</p>`; return; }
     if (day !== S.date || !ok()) return;
-    if (!shows.length) { list.innerHTML = `<p class="empty">${t('no_shows')}</p>`; return; }
+    shows = shows.filter((x) => kidsOk(movieById(x.movie_id) || {}));
+    if (!shows.length) { list.innerHTML = `<p class="empty">${S.kids ? t('kids_empty') : t('no_shows')}</p>`; return; }
     list.innerHTML = S.mode === 'movies' ? byMovies(shows) : byHalls(shows);
   }
 
@@ -414,7 +447,7 @@
   function sessRow(s, second) {
     const tag = s.past ? 'div' : 'a';
     return `<${tag} class="srow${s.past ? ' past' : ''}" ${s.past ? '' : `href="#/session/${s.id}"`}>
-      <b class="stime">${s.time}</b><span class="shall">${second}</span><span class="slang">${langLabel(s.lang)}</span>
+      <b class="stime">${s.time}</b><span class="shall">${second}<small class="send">${t('till', { t: endTime(s) })}</small>${occBadge(s)}</span><span class="slang">${langLabel(s.lang)}</span>
       ${priceCells(s.prices)}<span class="sfrom">${s.past ? t('past') : t('from', { p: money(Math.min(s.prices.adult, s.prices.student)) })}</span>
     </${tag}>`;
   }
@@ -422,13 +455,14 @@
   function byMovies(shows) {
     const groups = new Map();
     shows.forEach((s) => { if (!groups.has(s.movie_id)) groups.set(s.movie_id, []); groups.get(s.movie_id).push(s); });
+    if (S.sortFree) groups.forEach((ss) => ss.sort((a, b) => (a.past - b.past) || ((b.free ?? 0) - (a.free ?? 0))));
     return [...groups].map(([mid, ss]) => {
       const m = movieById(mid);
       return `<article class="mcard">
         <a href="#/movie/${m.id}" class="mposter">${poster(m, 'sm')}</a>
         <div class="mbody">
           <div class="mtitle-row"><a href="#/movie/${m.id}" class="mtitle"><h3>${esc(L(m.title))}</h3><span class="age">${m.age}+</span></a>${favBtn(m)}</div>
-          <p class="meta">${isPresale(m) ? `<span class="presale">${t('presale')}</span> ` : ''}${esc(L(m.genre))}<span data-dur="${m.id}">${runtime(m) ? ` · ${durText(m)}` : ''}</span></p>
+          <p class="meta">${starsTxt(m)}${isPresale(m) ? `<span class="presale">${t('presale')}</span> ` : ''}${esc(L(m.genre))}<span data-dur="${m.id}">${runtime(m) ? ` · ${durText(m)}` : ''}</span></p>
           <div class="stable">${sessHead(t('col_hall'))}${ss.map((s) => sessRow(s, `${S.cat.halls[s.hall].name} · ${s.format}`)).join('')}</div>
         </div>
       </article>`;
@@ -438,6 +472,7 @@
   function byHalls(shows) {
     return Object.entries(S.cat.halls).map(([hid, hl]) => {
       const ss = shows.filter((s) => String(s.hall) === hid);
+      if (S.sortFree) ss.sort((a, b) => (a.past - b.past) || ((b.free ?? 0) - (a.free ?? 0)));
       if (!ss.length) return '';
       return `<article class="hcard"><h3>${esc(hl.name)} <span class="chip">${esc(hl.format)}</span></h3>
         <div class="stable">${sessHead(S.lang === 'kk' ? 'Фильм' : 'Фильм')}${ss.map((s) => {
@@ -472,6 +507,7 @@
         ${poster(m, 'lg')}
         <div class="movie-info">
           <h1>${esc(L(m.title))} <span class="age">${m.age}+</span></h1>
+          <p class="m-rating" id="mRating">${starsTxt(m)}</p>
           <div class="m-actions">
             <button class="btn btn-white btn-sm" data-trailer="${m.id}" ${trailerOf(m) ? '' : 'hidden'}><svg class="ico" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/></svg>${t('watch_trailer')}</button>
             ${favBtn(m, true)}
@@ -488,8 +524,11 @@
           <h3>${t('sessions_for')}</h3>
           <div id="mDates"></div>
           <div class="chipsess" id="mSess"></div>
+          <h3>${t('reviews')}</h3>
+          <div id="reviews" class="reviews"><div class="skeleton small"></div></div>
         </div>
       </section>`;
+    loadReviews(m);
     const draw = async () => {
       $('#mDates', page).replaceChildren(dateStrip(draw));
       const box = $('#mSess', page);
@@ -498,7 +537,7 @@
       const shows = (await loadSchedule(day)).filter((s) => s.movie_id === m.id);
       if (day !== S.date || !ok()) return;
       box.innerHTML = shows.length ? shows.map((s) => {
-        const inner = `<b>${s.time}</b><span>${S.cat.halls[s.hall].name} · ${s.format} · ${langLabel(s.lang)}</span><small>${s.past ? t('past') : t('from', { p: money(Math.min(s.prices.adult, s.prices.student)) })}</small>`;
+        const inner = `<b>${s.time} <em class="send">→ ${endTime(s)}</em></b><span>${S.cat.halls[s.hall].name} · ${s.format} · ${langLabel(s.lang)}</span><small>${s.past ? t('past') : t('from', { p: money(Math.min(s.prices.adult, s.prices.student)) })}</small>${occBadge(s)}`;
         return s.past ? `<div class="sbtn past">${inner}</div>` : `<a class="sbtn" href="#/session/${s.id}">${inner}</a>`;
       }).join('') : `<p class="empty">${t('no_shows')}</p>`;
     };
@@ -515,9 +554,10 @@
     try { data = await api(`/showtimes/${id}`); } catch (e) { return ok() && notFound(page, errMsg(e)); }
     if (!ok()) return;
     const { show, movie } = data;
-    const taken = new Set(data.taken);
+    let taken = new Set(data.taken);
+    let held = new Set(data.held || []);
     if (!S.order || S.order.showId !== id) S.order = { showId: id, seats: [], types: {} };
-    S.order.seats = S.order.seats.filter(({ r, i }) => !taken.has(seatName(r, i)));
+    S.order.seats = S.order.seats.filter(({ r, i }) => !taken.has(seatName(r, i)) && !held.has(seatName(r, i)));
     saveOrder();
     const { rows, seats: perRow, max_seats: maxSeats } = S.cat.layout;
     const priceFor = (r, i) => {
@@ -538,7 +578,7 @@
         ${poster(movie, 'xs')}
         <div class="sp-info">
           <h2>${esc(L(movie.title))}</h2>
-          <p class="sp-meta">${dateShort} • ${show.time} • ${show.format} <span class="badge">${langLabel(show.lang)}</span> <span class="badge badge-age">${movie.age}+</span></p>
+          <p class="sp-meta">${dateShort} • ${show.time}–${endTime(show)} • ${show.format} <span class="badge">${langLabel(show.lang)}</span> <span class="badge badge-age">${movie.age}+</span></p>
           <p class="sp-place">${esc(S.cat.cinema.name)} ${esc(cityName(show.city))} • ${esc(S.cat.halls[show.hall].name)}</p>
         </div>
       </div>
@@ -563,6 +603,7 @@
       <ul class="legend">
         <li><i class="dot available"></i>${t('available')}</li>
         <li><i class="dot taken"></i>${t('taken')}</li>
+        <li><i class="dot held"></i>${t('held')}</li>
         <li><i class="dot vipd"></i>${t('vip')} · ${money(show.prices.vip)}</li>
         <li><i class="dot selected"></i>${t('selected')}</li>
       </ul>
@@ -584,17 +625,18 @@
           const b = document.createElement('button');
           const name = seatName(r, i);
           const tk = taken.has(name);
+          const hd = !tk && held.has(name);
           const sel = isSel(r, i);
-          b.className = 'seat' + (isVip(r) ? ' vip' : '') + (tk ? ' taken' : '') + (sel ? ' selected' : '');
-          b.disabled = tk || show.past;
+          b.className = 'seat' + (isVip(r) ? ' vip' : '') + (tk ? ' taken' : '') + (hd ? ' held' : '') + (sel ? ' selected' : '');
+          b.disabled = tk || hd || show.past;
           b.textContent = i + 1;
-          b.setAttribute('aria-label', t('row_seat', { r: r + 1, s: i + 1 }) + (tk ? `, ${t('taken')}` : ''));
+          b.setAttribute('aria-label', t('row_seat', { r: r + 1, s: i + 1 }) + (tk ? `, ${t('taken')}` : hd ? `, ${t('held')}` : ''));
           b.setAttribute('aria-pressed', String(sel));
           b.addEventListener('click', () => {
             if (sel) S.order.seats = S.order.seats.filter((s) => !(s.r === r && s.i === i));
             else if (S.order.seats.length >= maxSeats) return toast(t('max_seats', { n: maxSeats }));
             else S.order.seats.push({ r, i });
-            saveOrder(); drawGrid(); drawBar();
+            saveOrder(); drawGrid(); drawBar(); syncHolds();
           });
           grid.append(b);
         }
@@ -637,7 +679,44 @@
       $('#contBtn').disabled = !n || show.past;
       $('#v3dBtn').disabled = !n;
     };
-    const goNext = () => {
+    // удержание выбранных мест на сервере (другие видят их занятыми 10 минут)
+    let holdReq = null;
+    const syncHolds = () => {
+      clearTimeout(holdReq);
+      return new Promise((resolve) => {
+        holdReq = setTimeout(async () => {
+          try {
+            const res = await api('/holds', { method: 'POST', body: { showtime_id: id, seats: S.order.seats.map(({ r, i }) => seatName(r, i)) } });
+            if (res.conflicts.length) {
+              const lost = new Set(res.conflicts);
+              S.order.seats = S.order.seats.filter(({ r, i }) => !lost.has(seatName(r, i)));
+              res.conflicts.forEach((x) => held.add(x));
+              saveOrder(); drawGrid(); drawBar();
+              toast(t('seat_grabbed'));
+            }
+          } catch { /* сеть — попробуем при следующем изменении */ }
+          resolve();
+        }, 250);
+      });
+    };
+    // обновление схемы каждые 5 секунд: чужие покупки и удержания появляются сразу
+    clearInterval(liveTimer);
+    liveTimer = setInterval(async () => {
+      if (!document.body.contains(grid)) { clearInterval(liveTimer); return; }
+      if (document.hidden || $('.view')) return;
+      try {
+        const fresh = await api(`/showtimes/${id}`);
+        taken = new Set(fresh.taken);
+        held = new Set(fresh.held || []);
+        const before = S.order.seats.length;
+        S.order.seats = S.order.seats.filter(({ r, i }) => !taken.has(seatName(r, i)) && !held.has(seatName(r, i)));
+        if (S.order.seats.length !== before) { saveOrder(); toast(t('seat_grabbed')); }
+        drawGrid(); drawBar();
+      } catch { /* нет сети */ }
+    }, 5000);
+    const goNext = async () => {
+      await syncHolds();
+      if (!S.order.seats.length) return;
       S.order.holdUntil = Date.now() + 10 * 60 * 1000;
       saveOrder();
       if (!S.user) { toast(t('login_to_pay')); location.hash = '#/login?next=checkout'; }
@@ -646,6 +725,7 @@
     $('#contBtn').addEventListener('click', goNext);
     $('#v3dBtn').addEventListener('click', () => open3D(page, show, movie, priceFor, total, goNext));
     drawGrid(); drawBar();
+    if (S.order.seats.length) syncHolds();
     applyZoom(false); // при увеличении схема шире окна — показываем её центр (там лучшие места)
   }
 
@@ -662,6 +742,8 @@
       <canvas></canvas>
       <button class="view-close icon-btn" aria-label="${t('back')}"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
       <p class="view-hint">${t('drag_hint')}</p>
+      <span class="view-mood"></span>
+      <button class="view-trailer btn btn-sm" hidden aria-pressed="false"><svg class="ico" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/></svg><span>${t('trailer_on')}</span></button>
       <div class="sheet">
         <button class="handle-btn" aria-expanded="true" aria-label="${t('sheet_hide')}"><span class="handle"></span></button>
         <div class="sheet-mini">
@@ -730,8 +812,22 @@
     view.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
     $('.view-close', view).focus();
     if (!Hall3D.available()) { sheet.classList.add('open'); return; }
+    const hour = Number(show.starts_at.slice(11, 13));
+    const mood = hour >= 20 || hour < 6 ? 'night' : hour >= 17 ? 'evening' : 'day';
+    const trailerKey = trailerOf(movie);
+    const tb = $('.view-trailer', view);
+    if (trailerKey && Hall3D.canTrailer()) {
+      tb.hidden = false;
+      tb.addEventListener('click', () => {
+        const on = tb.getAttribute('aria-pressed') !== 'true';
+        Hall3D.setTrailer(on ? trailerKey : null);
+        tb.setAttribute('aria-pressed', String(on));
+        $('span', tb).textContent = on ? t('trailer_off') : t('trailer_on');
+      });
+    }
+    $('.view-mood', view).textContent = t('mood_' + mood);
     Hall3D.open($('canvas', view), {
-      selected: S.order.seats, target,
+      selected: S.order.seats, target, mood,
       onArrive: () => { sheet.classList.add('open'); hint.classList.add('show'); setTimeout(() => hint.classList.remove('show'), 3000); },
       onDrag: () => hint.classList.remove('show'),
     });
@@ -739,17 +835,20 @@
 
   // ---------- Страница: оплата ----------
   let holdTimer = null;
+  let liveTimer = null;
   let cardDraft = null;
 
   async function pageCheckout(page) {
     if (!S.order || !S.order.seats.length) { location.hash = '#/'; return; }
     if (!S.user) { location.hash = '#/login?next=checkout'; return; }
-    let data;
+    let data, bonus = { balance: 0, max_share: 50 };
     const ok = fresh();
-    try { data = await api(`/showtimes/${S.order.showId}`); } catch (e) { return ok() && notFound(page, errMsg(e)); }
+    try {
+      [data, bonus] = await Promise.all([api(`/showtimes/${S.order.showId}`), api('/me/bonus').catch(() => bonus)]);
+    } catch (e) { return ok() && notFound(page, errMsg(e)); }
     if (!ok()) return;
     const { show, movie } = data;
-    const taken = new Set(data.taken);
+    const taken = new Set([...data.taken, ...(data.held || [])]);
     const lost = S.order.seats.filter(({ r, i }) => taken.has(seatName(r, i)));
     if (lost.length || show.past || !S.order.holdUntil || S.order.holdUntil < Date.now()) {
       toast(show.past ? t('show_started') : lost.length ? t('err_seats_taken', { s: lost.map(({ r, i }) => seatName(r, i)).join(', ') }) : t('hold_expired'));
@@ -757,9 +856,18 @@
       return;
     }
     const rows = S.cat.layout.rows;
-    const typeOf = (r, i) => (isVip(r) ? 'vip' : S.order.types[seatName(r, i)] || 'adult');
+    const defType = S.kids && show.prices.child != null ? 'child' : 'adult';
+    const typeOf = (r, i) => (isVip(r) ? 'vip' : S.order.types[seatName(r, i)] || defType);
     const priceOf = (r, i) => show.prices[typeOf(r, i)];
     const total = () => S.order.seats.reduce((s, { r, i }) => s + priceOf(r, i), 0);
+    let useBonus = false;
+    let gift = null; // { code, balance }
+    const calc = () => {
+      const tot = total();
+      const b = useBonus ? Math.min(bonus.balance, Math.floor(tot * (bonus.max_share || 50) / 100)) : 0;
+      const g = gift ? Math.min(gift.balance, tot - b) : 0;
+      return { tot, b, g, paid: tot - b - g };
+    };
 
     page.className = 'mid';
     page.innerHTML = `
@@ -770,10 +878,18 @@
           <div class="co-movie">${poster(movie, 'xs')}<div><h3>${esc(L(movie.title))}</h3><p class="muted">${showLine(show)}</p></div></div>
           <div class="co-seats" id="coSeats"></div>
           <p class="note" id="stuNote" hidden>${t('student_note')}</p>
-          <div class="co-total"><span>${t('total')}</span><b id="coTotal"></b></div>
+          <div class="co-extras">
+            <label class="co-opt" ${bonus.balance > 0 ? '' : 'hidden'}><input type="checkbox" id="useBonus"> <span>${t('use_bonus', { n: bonus.balance })}</span></label>
+            <div class="gift-apply"><input id="giftCode" placeholder="KADR-XXXX-XXXX" maxlength="14" autocapitalize="characters" aria-label="${t('gift_code')}"><button type="button" class="btn btn-ghost-b btn-sm" id="giftBtn">${t('apply')}</button></div>
+            <p class="small muted" id="giftInfo"></p>
+          </div>
+          <div class="co-lines" id="coLines"></div>
+          <div class="co-total"><span>${t('to_pay')}</span><b id="coTotal"></b></div>
+          <p class="small earn" id="coEarn"></p>
           <p class="hold" id="hold"></p>
         </section>
         <form class="card co-pay" id="payForm" novalidate>
+          <div id="cardBox">
           <h3>${t('card')} <span class="brand" id="brand"></span></h3>
           <label class="field"><span>${t('card_number')}</span><input id="cNum" inputmode="numeric" autocomplete="cc-number" placeholder="0000 0000 0000 0000" maxlength="23" required></label>
           <div class="field-row">
@@ -781,6 +897,7 @@
             <label class="field"><span>${t('card_cvc')}</span><input id="cCvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4" type="password" required></label>
           </div>
           <label class="field"><span>${t('card_holder')}</span><input id="cHolder" autocomplete="cc-name" autocapitalize="characters" placeholder="IVAN IVANOV" required></label>
+          </div>
           <p class="form-err" id="payErr" role="alert"></p>
           <button class="btn btn-green btn-block" id="payBtn" type="submit"></button>
           <div class="demo">
@@ -801,11 +918,33 @@
         return `<div class="co-seat"><span>${t('row_seat', { r: r + 1, s: i + 1 })}</span>${sel}<b>${money(priceOf(r, i))}</b></div>`;
       }).join('');
       $$('select[data-seat]').forEach((s) => s.addEventListener('change', () => { S.order.types[s.dataset.seat] = s.value; saveOrder(); drawSeats(); }));
-      $('#coTotal').textContent = money(total());
-      $('#payBtn').textContent = t('pay', { p: money(total()) });
+      drawTotals();
       $('#stuNote').hidden = !S.order.seats.some(({ r, i }) => typeOf(r, i) === 'student');
     };
+    function drawTotals() {
+      const c = calc();
+      $('#coLines').innerHTML = `<div class="co-line"><span>${t('total')}</span><span>${money(c.tot)}</span></div>`
+        + (c.b ? `<div class="co-line minus"><span>${t('bonus_line')}</span><span>−${money(c.b)}</span></div>` : '')
+        + (c.g ? `<div class="co-line minus"><span>${t('gift_line')}</span><span>−${money(c.g)}</span></div>` : '');
+      $('#coTotal').textContent = money(c.paid);
+      $('#coEarn').textContent = c.paid > 0 ? t('will_earn', { n: Math.floor(c.paid * 0.05) }) : '';
+      $('#payBtn').textContent = c.paid > 0 ? t('pay', { p: money(c.paid) }) : t('pay_free');
+      $('#cardBox').hidden = c.paid <= 0;
+      $$('#cardBox input').forEach((x) => { x.required = c.paid > 0; });
+    }
     drawSeats();
+    $('#useBonus').addEventListener('change', (e) => { useBonus = e.target.checked; drawTotals(); });
+    $('#giftBtn').addEventListener('click', async () => {
+      const code = $('#giftCode').value.trim().toUpperCase();
+      const info = $('#giftInfo');
+      if (!code) { gift = null; info.textContent = ''; drawTotals(); return; }
+      try {
+        const { gift: g } = await api(`/gift/${encodeURIComponent(code)}`);
+        if (g.balance <= 0) { gift = null; info.textContent = t('err_gift_empty'); }
+        else { gift = { code: g.code, balance: g.balance }; info.textContent = t('gift_ok', { n: money(g.balance) }); }
+      } catch (e) { gift = null; info.textContent = errMsg(e); }
+      drawTotals();
+    });
 
     const tick = () => {
       const left = Math.max(0, S.order.holdUntil - Date.now());
@@ -857,7 +996,9 @@
             showtime_id: show.id,
             seats: S.order.seats.map(({ r, i }) => ({ seat: seatName(r, i), type: typeOf(r, i) })),
             expected_total: total(),
-            card: { number: num.value, exp: exp.value, cvc: cvc.value, holder: holder.value },
+            use_bonus: calc().b,
+            gift_code: gift ? gift.code : undefined,
+            card: calc().paid > 0 ? { number: num.value, exp: exp.value, cvc: cvc.value, holder: holder.value } : undefined,
           },
         });
         clearInterval(holdTimer);
@@ -874,7 +1015,7 @@
         }
         if (err.code === 'auth_required') { S.user = null; location.hash = '#/login?next=checkout'; }
         btn.disabled = false;
-        btn.textContent = t('pay', { p: money(total()) });
+        drawTotals();
       }
     });
   }
@@ -890,7 +1031,11 @@
       <div class="t-top">${poster(m, 'xs')}<div><h3>${esc(L(m.title))} <span class="age">${m.age}+</span></h3><p class="muted">${showLine(s)}</p></div></div>
       <ul class="t-seats">${rows}</ul>
       <div class="t-foot"><div><small class="muted">${t('booking_code')}</small><b class="code">${esc(b.code)}</b></div><div class="t-sum"><small class="muted">${t('total')}</small><b>${money(b.total)}</b></div></div>
-      ${big ? `<div class="t-qr"><div id="qr"></div><p class="muted">${t('show_qr')}</p><p class="muted small">${t('paid_with', { b: esc(b.card_brand), l: esc(b.card_last4) })}</p></div>` : ''}
+      ${big && (b.bonus_used || b.gift_used || b.bonus_earned) ? `<div class="t-extra">
+        ${b.bonus_used ? `<span>${t('bonus_line')}: −${money(b.bonus_used)}</span>` : ''}
+        ${b.gift_used ? `<span>${t('gift_line')}: −${money(b.gift_used)}</span>` : ''}
+        ${b.bonus_earned ? `<span class="earn">+${b.bonus_earned} ${t('bonus_word')}</span>` : ''}</div>` : ''}
+      ${big ? `<div class="t-qr"><div id="qr"></div><p class="muted">${t('show_qr')}</p>${b.card_last4 ? `<p class="muted small">${t('paid_with', { b: esc(b.card_brand), l: esc(b.card_last4) })}</p>` : ''}</div>` : ''}
     </div>`;
   }
 
@@ -928,7 +1073,7 @@
   const nextHash = (q) => {
     const n = q.get('next') || '';
     if (/^movie-\d+$/.test(n)) return `#/movie/${n.slice(6)}`;
-    return ({ checkout: '#/checkout', tickets: '#/tickets', admin: '#/admin', profile: '#/profile' })[n] || '#/';
+    return ({ checkout: '#/checkout', tickets: '#/tickets', admin: '#/admin', profile: '#/profile', gift: '#/gift' })[n] || '#/';
   };
 
   function authForm(page, q, kind) {
@@ -999,14 +1144,168 @@
         <a class="btn btn-white btn-block" href="#/tickets">${t('my_tickets')}</a>
         <button class="btn btn-ghost-b btn-block" id="logoutBtn">${t('logout')}</button>
       </div>
+      <section class="card list-card bonus-card" id="bonusCard"><div class="skeleton small"></div></section>
       ${listBlock('favorites', t('favorites'), t('no_favorites'))}
       ${listBlock('reminders', t('reminders'), t('no_reminders'))}`;
+    loadBonusCard();
     $('#logoutBtn').addEventListener('click', async () => {
       await api('/logout', { method: 'POST', body: {} }).catch(() => {});
       S.user = null;
       S.lists = { favorites: [], reminders: [] };
       toast(t('bye'));
       location.hash = '#/';
+    });
+  }
+
+  // ---------- Отзывы ----------
+  async function loadReviews(m) {
+    const box = $('#reviews');
+    if (!box) return;
+    let d;
+    try { d = await api(`/movies/${m.id}/reviews`); } catch { box.innerHTML = ''; return; }
+    if (!document.body.contains(box)) return;
+    const stars = (n) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
+    const mine = d.items.find((x) => x.mine);
+    box.innerHTML = `
+      <div class="rv-sum">${d.summary.count ? `<b>★ ${Number(d.summary.avg).toFixed(1)}</b><span class="muted">${t('reviews_count', { n: d.summary.count })}</span>` : `<span class="muted">${t('no_reviews')}</span>`}</div>
+      ${d.can_review ? `<form class="card rv-form" novalidate>
+          <span class="small muted">${mine ? t('review_edit') : t('review_write')}</span>
+          <div class="rv-stars" role="radiogroup" aria-label="${t('your_rating')}">${[1, 2, 3, 4, 5].map((n) => `<button type="button" data-star="${n}" aria-label="${n}" class="${mine && n <= mine.stars ? 'on' : ''}">★</button>`).join('')}</div>
+          <textarea name="text" rows="3" maxlength="500" placeholder="${t('review_ph')}">${esc(mine ? mine.text || '' : '')}</textarea>
+          <p class="form-err" role="alert"></p>
+          <button class="btn btn-green btn-sm" type="submit">${t('review_send')}</button>
+        </form>` : `<p class="small muted">${S.user ? t('review_need_ticket') : t('review_login')}</p>`}
+      <div class="rv-list">${d.items.map((x) => `<div class="rv">
+          <div class="rv-head"><b>${esc(x.name)}</b><span class="rv-st">${stars(x.stars)}</span><small class="muted">${fmtDay(x.created_at.slice(0, 10))}</small>
+          ${d.is_admin ? `<button class="rv-del" data-del="${x.user_id}" aria-label="${t('delete')}">✕</button>` : ''}</div>
+          ${x.text ? `<p>${esc(x.text)}</p>` : ''}</div>`).join('')}</div>`;
+    const form = $('.rv-form', box);
+    if (form) {
+      let val = mine ? mine.stars : 0;
+      $$('[data-star]', form).forEach((b) => b.addEventListener('click', () => {
+        val = Number(b.dataset.star);
+        $$('[data-star]', form).forEach((x) => x.classList.toggle('on', Number(x.dataset.star) <= val));
+      }));
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!val) { $('.form-err', form).textContent = t('err_bad_stars'); return; }
+        try {
+          const r = await api(`/movies/${m.id}/reviews`, { method: 'POST', body: { stars: val, text: form.elements.text.value } });
+          S.cat.ratings = S.cat.ratings || {};
+          if (r.summary) S.cat.ratings[m.id] = r.summary;
+          const mr = $('#mRating'); if (mr) mr.innerHTML = starsTxt(m);
+          toast(t('review_thanks'));
+          loadReviews(m);
+        } catch (err) { $('.form-err', form).textContent = errMsg(err); }
+      });
+    }
+    $$('[data-del]', box).forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm(t('delete_confirm'))) return;
+      try { await api(`/admin/reviews/${m.id}/${b.dataset.del}`, { method: 'DELETE', body: {} }); loadReviews(m); } catch (err) { toast(errMsg(err)); }
+    }));
+  }
+
+  // ---------- KADR-бонусы и значки ----------
+  const BADGE_ICON = { first: '🎟️', premiere: '🌟', night: '🌙', family: '👨‍👩‍👧', vip: '💺', five: '🎬', ten: '🏆', critic: '✍️' };
+  async function loadBonusCard() {
+    const box = $('#bonusCard');
+    if (!box) return;
+    let d;
+    try { d = await api('/me/bonus'); } catch { box.hidden = true; return; }
+    if (!document.body.contains(box)) return;
+    box.innerHTML = `
+      <div class="bc-top"><div><span class="small muted">${t('bonus_title')}</span><b class="bc-bal">${d.balance} <small>${t('bonus_word')}</small></b></div>
+        <a class="btn btn-ghost-b btn-sm" href="#/gift">🎁 ${t('gift_title')}</a></div>
+      <p class="small muted">${t('bonus_rules', { e: d.earn_percent, m: d.max_share })}</p>
+      <h3>${t('badges')}</h3>
+      <div class="badges">${d.all_badges.map((b) => `<div class="badge-i${d.badges.includes(b) ? ' got' : ''}" title="${esc(t('bd_' + b + '_d'))}">
+        <span class="bi">${BADGE_ICON[b] || '★'}</span><b>${t('bd_' + b)}</b><small>${t('bd_' + b + '_d')}</small></div>`).join('')}</div>`;
+  }
+
+  // ---------- Подарочные сертификаты ----------
+  function giftCardHtml(g) {
+    return `<div class="giftcard">
+      <div class="gc-top"><span class="logo-mark">K</span><span>KADR Cinema</span></div>
+      <p class="gc-hi">${g.to ? esc(t('gift_for', { n: g.to })) : t('gift_title')}</p>
+      <b class="gc-amt">${money(g.amount)}</b>
+      ${g.message ? `<p class="gc-msg">«${esc(g.message)}»</p>` : ''}
+      ${g.from ? `<p class="gc-from">— ${esc(g.from)}</p>` : ''}
+      <div class="gc-code"><small>${t('gift_code')}</small><code>${esc(g.code)}</code></div>
+    </div>`;
+  }
+  function pageGift(page) {
+    page.className = 'narrow';
+    if (!S.user) {
+      page.innerHTML = `<h1>🎁 ${t('gift_title')}</h1><div class="card center"><p>${t('gift_login')}</p><a class="btn btn-green" href="#/login?next=gift">${t('login')}</a></div>`;
+      return;
+    }
+    let amount = 5000;
+    page.innerHTML = `
+      <a class="back" href="#/profile">‹ ${t('back')}</a>
+      <h1>🎁 ${t('gift_title')}</h1>
+      <p class="muted">${t('gift_intro')}</p>
+      <form class="card gift-form" novalidate>
+        <div class="amts">${[3000, 5000, 10000, 20000].map((a) => `<button type="button" class="chip-btn${a === amount ? ' on' : ''}" data-amt="${a}">${money(a)}</button>`).join('')}</div>
+        <label class="field"><span>${t('gift_amount')}</span><input name="amount" type="number" min="1000" max="100000" step="500" value="${amount}"></label>
+        <label class="field"><span>${t('gift_to')}</span><input name="to" maxlength="40" required></label>
+        <label class="field"><span>${t('gift_from')}</span><input name="from" maxlength="40" value="${esc(S.user.name)}"></label>
+        <label class="field"><span>${t('gift_msg')}</span><textarea name="msg" rows="3" maxlength="300" placeholder="${t('gift_msg_ph')}"></textarea></label>
+        <h3>${t('card')}</h3>
+        <label class="field"><span>${t('card_number')}</span><input name="num" inputmode="numeric" autocomplete="cc-number" placeholder="0000 0000 0000 0000" maxlength="23"></label>
+        <div class="field-row">
+          <label class="field"><span>${t('card_exp')}</span><input name="exp" inputmode="numeric" autocomplete="cc-exp" placeholder="12/29" maxlength="5"></label>
+          <label class="field"><span>${t('card_cvc')}</span><input name="cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4" type="password"></label>
+        </div>
+        <label class="field"><span>${t('card_holder')}</span><input name="holder" autocomplete="cc-name" placeholder="IVAN IVANOV"></label>
+        <button type="button" class="demo-card" data-demo><code>4242 4242 4242 4242</code><span>${t('demo_ok')}</span></button>
+        <p class="form-err" role="alert"></p>
+        <button class="btn btn-green btn-block" type="submit">${t('gift_buy', { p: money(amount) })}</button>
+      </form>`;
+    const form = $('.gift-form', page);
+    const f = form.elements;
+    const setAmt = (a) => {
+      amount = a;
+      $$('[data-amt]', form).forEach((b) => b.classList.toggle('on', Number(b.dataset.amt) === a));
+      $('[type=submit]', form).textContent = t('gift_buy', { p: money(a) });
+    };
+    $$('[data-amt]', form).forEach((b) => b.addEventListener('click', () => { f.amount.value = b.dataset.amt; setAmt(Number(b.dataset.amt)); }));
+    f.amount.addEventListener('input', () => setAmt(Number(f.amount.value) || 0));
+    f.num.addEventListener('input', () => { const d = f.num.value.replace(/\D/g, '').slice(0, 19); f.num.value = d.replace(/(.{4})/g, '$1 ').trim(); });
+    $('[data-demo]', form).addEventListener('click', () => { f.num.value = '4242 4242 4242 4242'; f.exp.value = '12/30'; f.cvc.value = '123'; if (!f.holder.value) f.holder.value = S.user.name.toUpperCase(); });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $('[type=submit]', form);
+      btn.disabled = true;
+      try {
+        await sleep(900);
+        const { code } = await api('/gift', { method: 'POST', body: { amount, to_name: f.to.value, from_name: f.from.value, message: f.msg.value,
+          card: { number: f.num.value, exp: f.exp.value, cvc: f.cvc.value, holder: f.holder.value } } });
+        location.hash = `#/gift/${code}?new=1`;
+      } catch (err) { $('.form-err', form).textContent = errMsg(err); btn.disabled = false; }
+    });
+  }
+  async function pageGiftView(page, code, q) {
+    page.className = 'narrow';
+    let g;
+    const ok = fresh();
+    try { ({ gift: g } = await api(`/gift/${encodeURIComponent(code)}`)); } catch (e) { return ok() && notFound(page, errMsg(e)); }
+    if (!ok()) return;
+    const link = `${location.origin}/#/gift/${g.code}`;
+    page.innerHTML = `
+      ${q.get('new') ? `<div class="success"><span class="check">✓</span><h1>${t('gift_done')}</h1></div>` : ''}
+      ${giftCardHtml(g)}
+      <p class="muted gc-bal">${t('gift_balance', { n: money(g.balance) })}</p>
+      <p class="small muted">${t('gift_how')}</p>
+      <div class="actions">
+        <button class="btn btn-green" id="shareGift">${t('gift_share')}</button>
+        <a class="btn btn-white" href="#/">${t('choose_film')}</a>
+      </div>`;
+    $('#shareGift').addEventListener('click', async () => {
+      const text = `${t('gift_share_text')} ${link}`;
+      try {
+        if (navigator.share) await navigator.share({ title: 'KADR Cinema', text, url: link });
+        else { await navigator.clipboard.writeText(link); toast(t('copied')); }
+      } catch { /* пользователь отменил */ }
     });
   }
 
@@ -1026,6 +1325,8 @@
     [/^\/login$/, (p, q) => (S.user ? (location.hash = nextHash(q)) : authForm(p, q, 'login'))],
     [/^\/register$/, (p, q) => (S.user ? (location.hash = nextHash(q)) : authForm(p, q, 'register'))],
     [/^\/profile$/, pageProfile],
+    [/^\/gift$/, pageGift],
+    [/^\/gift\/(KADR-[A-Za-z0-9]{4}-[A-Za-z0-9]{4})$/, pageGiftView],
     [/^\/admin$/, (p, q) => {
       if (!S.user) { location.hash = '#/login?next=admin'; return; }
       if (!S.user.is_admin || !window.AdminPage) return notFound(p, t('err_forbidden'));
@@ -1042,6 +1343,7 @@
     if (window.Hall3D) Hall3D.close();
     document.body.classList.remove('no-scroll');
     clearInterval(holdTimer);
+    clearInterval(liveTimer);
     const raw = (location.hash || '#/').slice(1);
     const [path, qs] = raw.split('?');
     const q = new URLSearchParams(qs || '');
