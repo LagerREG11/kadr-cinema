@@ -23,6 +23,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import catalog as C
+import posters
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -237,8 +238,19 @@ def logout():
 
 # ---------- Каталог и расписание ----------
 def _day_range() -> list[date]:
-    today = now().date()
-    return [today + timedelta(days=i) for i in range(C.DAYS_AHEAD)]
+    return C.days_for(now().date())
+
+
+@app.get("/api/posters")
+def posters_view():
+    """Официальные постеры и длительность с TMDB (пусто, если ключ не задан)."""
+    data = posters.for_movies(C.MOVIES)
+    resp = jsonify(
+        enabled=posters.enabled(),
+        movies={str(mid): {k: v for k, v in info.items() if k in ("poster", "runtime")} for mid, info in data.items()},
+    )
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
 
 
 def _with_state(show: dict) -> dict:

@@ -89,21 +89,48 @@
       case 'confetti': return [...Array(26)].map((_, k) => `<rect x="${(k * 53) % 190}" y="${(k * 37) % 230 + 10}" width="6" height="10" rx="2" fill="${['#fff', '#ffe08a', '#7ee0b0', '#ff8fa3'][k % 4]}" opacity=".8" transform="rotate(${k * 29} ${(k * 53) % 190} ${(k * 37) % 230 + 10})"/>`).join('');
       case 'city': return [[10, 140, 26], [40, 110, 30], [74, 150, 22], [100, 90, 34], [138, 130, 26], [168, 105, 28]].map(([x, y, w]) => `<rect x="${x}" y="${y}" width="${w}" height="${300 - y}" fill="#0a0812" opacity=".85"/>`).join('') + `<circle cx="150" cy="60" r="14" fill="${a}" opacity=".9"/>`;
       case 'cloud': return `<g fill="#fff" opacity=".9"><ellipse cx="80" cy="120" rx="40" ry="26"/><ellipse cx="118" cy="110" rx="34" ry="30"/><ellipse cx="140" cy="128" rx="30" ry="20"/></g><circle cx="92" cy="114" r="3" fill="#2f6690"/><circle cx="116" cy="112" r="3" fill="#2f6690"/>`;
+      // металлическая маска под капюшоном
+      case 'mask': return `<path d="M100 40 C40 40 30 120 36 200 L60 300 H140 L164 200 C170 120 160 40 100 40Z" fill="#0f1a0d"/><path d="M100 78 C70 78 64 110 66 150 C68 182 84 206 100 210 C116 206 132 182 134 150 C136 110 130 78 100 78Z" fill="#9aa59a"/><path d="M76 132 H94 M106 132 H124" stroke="#0b0f0a" stroke-width="7" stroke-linecap="round"/><path d="M86 172 H114" stroke="#0b0f0a" stroke-width="4"/><path d="M100 84 V204" stroke="#6f7a6f" stroke-width="1.5"/>`;
       default: return '';
     }
   }
+  // официальный постер TMDB (если сервер его отдал), иначе — нарисованная обложка
+  const tmdb = (m) => (S.posters && S.posters[m.id]) || {};
+  const runtime = (m) => tmdb(m).runtime || null;
+  const durText = (m) => (runtime(m) ? t('min', { n: runtime(m) }) : '');
+  const posterImg = (m) => (tmdb(m).poster ? `<img src="${esc(tmdb(m).poster)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : '');
   function poster(m, cls = '') {
     const id = `pg${m.id}`;
-    return `<div class="poster ${cls}" aria-hidden="true">
+    return `<div class="poster ${cls}" data-mid="${m.id}" aria-hidden="true">
       <svg viewBox="0 0 200 300" preserveAspectRatio="xMidYMid slice">
         <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${m.colors[0]}"/><stop offset="1" stop-color="${m.colors[1]}"/></linearGradient></defs>
         <rect width="200" height="300" fill="url(#${id})"/>${motif(m)}
         <rect y="190" width="200" height="110" fill="url(#shade)"/>
       </svg>
       <span class="poster-title">${esc(L(m.title))}</span>
+      ${posterImg(m)}
       <span class="age-badge">${m.age}+</span>
     </div>`;
   }
+  // постеры пришли после отрисовки страницы — вставить их в уже показанные обложки
+  function hydratePosters() {
+    $$('.poster[data-mid]').forEach((el) => {
+      const m = movieById(Number(el.dataset.mid));
+      if (m && tmdb(m).poster && !el.querySelector('img')) el.querySelector('.age-badge').insertAdjacentHTML('beforebegin', posterImg(m));
+    });
+    $$('[data-dur]').forEach((el) => {
+      const m = movieById(Number(el.dataset.dur));
+      if (m && runtime(m)) el.textContent = ` · ${durText(m)}`;
+    });
+    $$('[data-dur-plain]').forEach((el) => {
+      const m = movieById(Number(el.dataset.durPlain));
+      if (m && runtime(m)) el.textContent = durText(m);
+    });
+    const foot = $('.foot');
+    if (S.tmdbOn && foot && !foot.textContent) foot.innerHTML = `<p>${t('tmdb_note')} <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a>. This product uses the TMDB API but is not endorsed or certified by TMDB.</p>`;
+  }
+  const todayIso = () => S.cat.days[0];
+  const isPresale = (m) => !!(m.release && m.release > todayIso());
 
   // ---------- Шапка и навигация ----------
   function updateChrome() {
@@ -179,6 +206,17 @@
     const body = $('#tabBody', page);
     if (S.tab === 'about') return renderAbout(body);
 
+    // «Скоро в кино»: фильмы в предпродаже
+    const soon = S.cat.movies.filter(isPresale).sort((a, b) => a.release.localeCompare(b.release));
+    if (soon.length) {
+      const strip = document.createElement('section');
+      strip.className = 'soon';
+      strip.innerHTML = `<h3>${t('soon')}</h3><div class="soon-row">${soon.map((m) => `
+        <a class="soon-card" href="#/movie/${m.id}">${poster(m)}
+          <b>${esc(L(m.title))}</b><span class="presale">${t('presale')}</span><small>${t('premiere')}: ${fmtDay(m.release)}</small>
+        </a>`).join('')}</div>`;
+      body.append(strip);
+    }
     body.append(dateStrip(() => pageHome(page)));
     const toggle = document.createElement('div');
     toggle.className = 'seg';
@@ -221,7 +259,7 @@
         <a href="#/movie/${m.id}" class="mposter">${poster(m, 'sm')}</a>
         <div class="mbody">
           <a href="#/movie/${m.id}" class="mtitle"><h3>${esc(L(m.title))}</h3><span class="age">${m.age}+</span></a>
-          <p class="meta">${esc(L(m.genre))} · ${t('min', { n: m.duration })}</p>
+          <p class="meta">${isPresale(m) ? `<span class="presale">${t('presale')}</span> ` : ''}${esc(L(m.genre))}<span data-dur="${m.id}">${runtime(m) ? ` · ${durText(m)}` : ''}</span></p>
           <div class="stable">${sessHead(t('col_hall'))}${ss.map((s) => sessRow(s, `${S.cat.halls[s.hall].name} · ${s.format}`)).join('')}</div>
         </div>
       </article>`;
@@ -255,6 +293,8 @@
   // ---------- Страница: фильм ----------
   async function pageMovie(page, id) {
     const m = movieById(Number(id));
+    // фильм в предпродаже: сразу открыть день премьеры
+    if (m && m.release && S.date < m.release && S.cat.days.includes(m.release)) S.date = m.release;
     if (!m) return notFound(page);
     page.className = 'wide';
     page.innerHTML = `
@@ -265,7 +305,8 @@
           <h1>${esc(L(m.title))} <span class="age">${m.age}+</span></h1>
           <dl class="facts">
             <div><dt>${t('genre')}</dt><dd>${esc(L(m.genre))}</dd></div>
-            <div><dt>${t('duration')}</dt><dd>${t('min', { n: m.duration })}</dd></div>
+            ${m.release && isPresale(m) ? `<div><dt>${t('premiere')}</dt><dd>${fmtDay(m.release)}</dd></div>` : ''}
+            <div><dt>${t('duration')}</dt><dd data-dur-plain="${m.id}">${runtime(m) ? durText(m) : '—'}</dd></div>
             <div><dt>${t('langs')}</dt><dd>${m.langs.map(langLabel).join(', ')}</dd></div>
           </dl>
           <h3>${t('about_movie')}</h3>
@@ -834,7 +875,7 @@
     } catch (e) {
       if (seq === routeSeq) notFound(page, errMsg(e));
     }
-    if (seq === routeSeq) { updateChrome(); window.scrollTo(0, 0); }
+    if (seq === routeSeq) { updateChrome(); hydratePosters(); window.scrollTo(0, 0); }
   }
 
   // ---------- Старт ----------
@@ -866,5 +907,11 @@
       return;
     }
     route();
+    // официальные постеры грузятся отдельно, чтобы не задерживать открытие сайта
+    api('/posters').then((p) => {
+      S.tmdbOn = !!p.enabled;
+      S.posters = Object.fromEntries(Object.entries(p.movies || {}).map(([k, v]) => [Number(k), v]));
+      hydratePosters();
+    }).catch(() => {});
   })();
 })();

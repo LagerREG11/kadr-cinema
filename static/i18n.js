@@ -3,7 +3,7 @@ window.I18N = {
   kk: {
     nav_afisha: 'Афиша', nav_tickets: 'Билеттерім', nav_profile: 'Профиль',
     login: 'Кіру', register: 'Тіркелу', logout: 'Шығу',
-    tab_schedule: 'Кесте', tab_about: 'Кинотеатр туралы',
+    tab_schedule: 'Кесте', soon: 'Жақында кинода', presale: 'Алдын ала сату', premiere: 'Премьера', tmdb_note: 'Фильм постерлері мен ұзақтығы:', tab_about: 'Кинотеатр туралы',
     by_movies: 'Фильмдер бойынша', by_halls: 'Залдар бойынша',
     col_time: 'Уақыт', col_hall: 'Зал', col_lang: 'Тіл', col_adult: 'Ересек', col_child: 'Бала', col_student: 'Студ.', col_vip: 'VIP',
     age: '{n}+', min: '{n} мин', no_shows: 'Бұл күні сеанс жоқ', past: 'Өтіп кетті', from: '{p} бастап',
@@ -50,7 +50,7 @@ window.I18N = {
   ru: {
     nav_afisha: 'Афиша', nav_tickets: 'Мои билеты', nav_profile: 'Профиль',
     login: 'Войти', register: 'Регистрация', logout: 'Выйти',
-    tab_schedule: 'Расписание', tab_about: 'О кинотеатре',
+    tab_schedule: 'Расписание', soon: 'Скоро в кино', presale: 'Предпродажа', premiere: 'Премьера', tmdb_note: 'Постеры и длительность фильмов:', tab_about: 'О кинотеатре',
     by_movies: 'По фильмам', by_halls: 'По залам',
     col_time: 'Время', col_hall: 'Зал', col_lang: 'Язык', col_adult: 'Взрослый', col_child: 'Детский', col_student: 'Студ.', col_vip: 'VIP',
     age: '{n}+', min: '{n} мин', no_shows: 'На этот день сеансов нет', past: 'Прошёл', from: 'от {p}',
