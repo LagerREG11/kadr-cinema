@@ -11,3 +11,14 @@ services:
         value: 3.12.7
       - key: SECRET_KEY
         generateValue: true
+      # постоянная база: Render сам подставит адрес и пароль своей PostgreSQL (вручную ничего вставлять не нужно)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kadr-db
+          property: connectionString
+
+databases:
+  - name: kadr-db
+    plan: free
+    databaseName: kadr
+    user: kadr
