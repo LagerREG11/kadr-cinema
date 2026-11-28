@@ -78,9 +78,109 @@ _arc(range(49, 61), "S", 0, 130, 230, 22, 24, lambda n: "end")
 C_SECTORS_BY_ID = {s["id"]: s for s in C_SECTORS}
 C_TOTAL = sum(s["rows"] * s["seats"] for s in C_SECTORS)  # 23 576
 
+# ---------- Almaty Arena (ледовая арена) ----------
+# Схема по официальной карте: нижний ярус A1–A4 (у главного входа) и B1–B10, верхний ярус C1–C13
+# (разрыв над главным входом). Число мест в секторе считается по длине дуги ряда.
+import math
+
+ARENA = {
+    "id": "arena", "shape": "arena", "city_id": "ala", "prefix": "h", "home": "Барыс",
+    "name": {"kk": "Almaty Arena", "ru": "Almaty Arena"},
+    "city": {"kk": "Алматы, Нұркент шағынауданы, 7", "ru": "Алматы, мкр. Нуркент, 7"},
+    "facts": {"kk": "~12 000 орын · мұз аренасы · 2016 жылдан", "ru": "~12 000 мест · ледовая арена · с 2016 года"},
+    "capacity": 12000, "opened": 2016,
+    "teams": ["ЦСКА", "СКА", "Ак Барс", "Авангард", "Металлург Мг", "Салават Юлаев", "Трактор", "Локомотив"],
+    "tournament": {"kk": "КХЛ (демо)", "ru": "КХЛ (демо)"},
+}
+# контур чаши — прямоугольник со скруглёнными углами вокруг площадки 60×30
+A_HX, A_HZ, A_R = 33.0, 18.0, 11.0
+A_LOW = {"off": 0.0, "d": 0.85, "rows": 15}
+A_UP = {"off": 17.5, "d": 0.85, "rows": 13}
+A_SEAT_W = 0.55
+
+
+def arena_point(a, off):
+    dx, dz = math.cos(math.radians(a)), math.sin(math.radians(a))
+    hx, hz, r = A_HX + off, A_HZ + off, A_R + off
+    lo, hi = 0.0, hx + hz + 10
+    for _ in range(30):
+        t = (lo + hi) / 2
+        ex, ez = max(abs(dx * t) - (hx - r), 0), max(abs(dz * t) - (hz - r), 0)
+        if ex * ex + ez * ez <= r * r:
+            lo = t
+        else:
+            hi = t
+    return dx * lo, dz * lo
+
+
+def _arc_len(a0, a1, off):
+    pts = [arena_point(a0 + (a1 - a0) * i / 24, off) for i in range(25)]
+    return sum(math.dist(pts[i], pts[i + 1]) for i in range(24))
+
+
+_APRICES = {"premium": 15000, "lower": 8000, "upper": 4000}
+A_SECTORS = []
+
+
+def _asec(sid, tier, a0, a1, kind):
+    g = A_UP if tier else A_LOW
+    mid_off = g["off"] + g["d"] * g["rows"] / 2
+    seats = max(8, int(_arc_len(a0, a1, mid_off) * 0.92 / A_SEAT_W))
+    A_SECTORS.append({"id": sid, "stand": sid[0], "tier": tier, "a0": a0, "a1": a1, "rows": g["rows"], "seats": seats,
+                      "kind": kind, "price": _APRICES[kind]})
+
+
+def _angle_table(off):
+    """Таблица (угол, длина дуги от угла 0° по часовой) для контура с отступом off."""
+    tab, total, prev = [(0.0, 0.0)], 0.0, arena_point(0, off)
+    for i in range(1, 1441):
+        a = i * 0.25
+        cur = arena_point(a, off)
+        total += math.dist(prev, cur)
+        tab.append((a, total))
+        prev = cur
+    return tab, total
+
+
+def _angle_at(tab, length):
+    for (a0, l0), (a1, l1) in zip(tab, tab[1:]):
+        if l1 >= length:
+            return a0 + (a1 - a0) * ((length - l0) / max(l1 - l0, 1e-9))
+    return tab[-1][0]
+
+
+# нижний ярус: длины участков по контуру (м) от середины правого торца по часовой стрелке
+_ltab, _lp = _angle_table(0.0)
+_q = math.pi / 2 * A_R / 2  # половина углового скругления
+_side = (2 * (A_HX - A_R) - 2 * 16) / 2  # кусок длинной стороны у угла
+_LOWER = [("B3", _q), ("B4", _q + _side), ("B5", 16), ("B6", 16), ("B7", _side + _q), ("B8", _q), ("B9", 2 * (A_HZ - A_R)),
+          ("B10", _q), ("A4", _q + _side), ("A3", 16), ("A2", 16), ("A1", _side + _q), ("B1", _q)]
+_pos = (A_HZ - A_R)  # начало B3 — конец половины торцевого участка B2
+_asec_raw = [("B2", _angle_at(_ltab, _lp - (A_HZ - A_R)) - 360, _angle_at(_ltab, _pos))]
+for sid, ln in _LOWER:
+    _asec_raw.append((sid, _angle_at(_ltab, _pos), _angle_at(_ltab, _pos + ln)))
+    _pos += ln
+for sid, a0, a1 in sorted(_asec_raw, key=lambda x: (x[0][0], int(x[0][1:]))):
+    _asec(sid, 0, round(a0 if a0 <= 180 else a0 - 360, 2), round(a1 if a1 <= 180 or a0 <= 180 else a1 - 360, 2), "premium" if sid[0] == "A" else "lower")
+# верхний ярус: 13 равных секторов, разрыв над главным входом (верх схемы, угол 270°)
+_utab, _up = _angle_table(A_UP["off"] + A_UP["d"] * A_UP["rows"] / 2)
+_gap = _up * 0.06
+_top = next(l for a, l in _utab if a >= 270)
+_start = _top + _gap / 2
+for n in range(13):
+    l0 = _start + n * (_up - _gap) / 13
+    l1 = l0 + (_up - _gap) / 13
+    a0, a1 = _angle_at(_utab, l0 % _up), _angle_at(_utab, l1 % _up)
+    if a1 < a0:
+        a1 += 360
+    _asec(f"C{n + 1}", 1, round(a0, 2), round(a1, 2), "upper")
+A_SECTORS_BY_ID = {s["id"]: s for s in A_SECTORS}
+A_TOTAL = sum(s["rows"] * s["seats"] for s in A_SECTORS)
+
 STADIUMS = {
     "kaisar": {"info": STADIUM, "sectors": SECTORS, "by_id": SECTORS_BY_ID, "total": TOTAL_SEATS},
     "central": {"info": CENTRAL, "sectors": C_SECTORS, "by_id": C_SECTORS_BY_ID, "total": C_TOTAL},
+    "arena": {"info": ARENA, "sectors": A_SECTORS, "by_id": A_SECTORS_BY_ID, "total": A_TOTAL},
 }
 
 TEAMS = ["Қайрат", "Астана", "Тобыл", "Ордабасы", "Ақтөбе", "Елімай", "Жетісу", "Атырау", "Қайсар"]
@@ -112,13 +212,17 @@ def init(conn):
 def matches(today: date, sid: str = "kaisar") -> list[dict]:
     """Демо-расписание: домашние матчи хозяев стадиона по выходным."""
     st = STADIUMS[sid]["info"]
-    teams = [t for t in TEAMS if t != st["home"]]
+    teams = st.get("teams") or [t for t in TEAMS if t != st["home"]]
     out = []
     d = today + timedelta(days=(5 - today.weekday()) % 7 or 7)  # ближайшая суббота
-    shift = 1 if sid == "central" else 0  # «Қайрат» — по воскресеньям
     for k in range(6):
-        day = d + timedelta(days=7 * k + ((1 if k % 3 == 2 else 0) if not shift else (0 if k % 3 == 2 else 1)))
-        hh = (18, 15, 13, 20, 16, 19)[k]  # днём, на закате и вечером
+        if sid == "arena":  # хоккей: по средам и пятницам вечером
+            day = d + timedelta(days=7 * k - (3 if k % 2 else 1))
+            hh = 19
+        else:
+            shift = 1 if sid == "central" else 0  # «Қайрат» — по воскресеньям
+            day = d + timedelta(days=7 * k + ((1 if k % 3 == 2 else 0) if not shift else (0 if k % 3 == 2 else 1)))
+            hh = (18, 15, 13, 20, 16, 19)[k]  # днём, на закате и вечером
         out.append({
             "id": f"{st['prefix']}{day:%Y%m%d}", "stadium": sid,
             "date": day.isoformat(),
@@ -126,7 +230,7 @@ def matches(today: date, sid: str = "kaisar") -> list[dict]:
             "starts_at": datetime.combine(day, time(hh, 0)).isoformat(timespec="minutes"),
             "home": st["home"],
             "away": teams[(today.toordinal() // 7 + k) % len(teams)],
-            "tournament": {"kk": "Премьер-лига (демо)", "ru": "Премьер-лига (демо)"},
+            "tournament": st.get("tournament") or {"kk": "Премьер-лига (демо)", "ru": "Премьер-лига (демо)"},
         })
     return out
 
@@ -197,7 +301,7 @@ def book():
     card_error, _brand, last4 = _d.check_card(d.get("card") or {})
     if card_error:
         return _d.err(card_error, 402 if card_error == "card_declined" else 400)
-    code = ("S" if m["stadium"] == "kaisar" else "C") + secrets.token_hex(3).upper()
+    code = {"kaisar": "S", "central": "C", "arena": "H"}[m["stadium"]] + secrets.token_hex(3).upper()
     ts = _d.now().isoformat(timespec="seconds")
     conn = _d.db()
     try:

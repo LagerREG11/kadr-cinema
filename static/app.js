@@ -324,7 +324,7 @@
     $$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
     $$('[data-lang]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.lang === S.lang)));
     const hash = location.hash || '#/';
-    const section = hash.startsWith('#/stadium') ? 'stadium' : hash.startsWith('#/theatre') ? 'theatre' : (hash === '#/' || hash === '#') ? 'hub' : hash.startsWith('#/admin') ? 'admin'
+    const section = hash.startsWith('#/stadium') || hash.startsWith('#/arena') ? 'stadium' : hash.startsWith('#/theatre') ? 'theatre' : (hash === '#/' || hash === '#') ? 'hub' : hash.startsWith('#/admin') ? 'admin'
       : hash.startsWith('#/tickets') || hash.startsWith('#/ticket/') ? 'tickets'
       : hash.startsWith('#/profile') || hash.startsWith('#/login') || hash.startsWith('#/register') ? 'profile' : 'home';
     $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === section));
@@ -1366,7 +1366,8 @@
     [/^\/stadium$/, (p) => window.StadiumPage(p)],
     [/^\/theatre$/, (p) => window.TheatrePage(p)],
     [/^\/theatre\/(t\d{8}-\d{4})$/, (p, sid) => window.TheatreShowPage(p, sid)],
-    [/^\/stadium\/([mc]\d{8})$/, (p, mid) => window.StadiumMatchPage(p, mid)],
+    [/^\/stadium\/([mch]\d{8})$/, (p, mid) => window.StadiumMatchPage(p, mid)],
+    [/^\/arena$/, (p) => window.StadiumPage(p, 'id=arena')],
     [/^\/movie\/(\d+)$/, pageMovie],
     [/^\/session\/([\w-]+)$/, pageSession],
     [/^\/checkout$/, pageCheckout],

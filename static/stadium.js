@@ -11,7 +11,7 @@
       from: '{p} бастап', choose_sector: 'Секторды таңдаңыз', sector: 'Сектор', row: 'Қатар', seat: 'Орын', free: 'бос',
       v3d: '3D көрініс', buy: 'Сатып алу · {p}', pick_seats: 'Орын таңдаңыз (6-ға дейін)', approx: 'Схема шамамен: ресми секторлар жарияланбаған.',
       pay_title: 'Төлем', done: 'Билет дайын!', to_pitch: 'алаң ортасына дейін', height: 'биіктігі', angle: 'көру бұрышы', back: 'Артқа',
-      vip: 'VIP', center: 'Орталық', side: 'Бүйір', east: 'Шығыс', end: 'Қақпа артында', away: 'Қонақтар', my: 'Стадион билеттері', lodge: 'Ложа', west: 'Батыс', upper: 'жоғарғы ярус', lower: 'төменгі ярус', central_d: 'Стадион: «Қайрат» матчтары, 60 сектор, 3D трибунадан көрініс', oval_note: 'Секторлар стадионның ресми картасы бойынша; орын саны шамамен.',
+      vip: 'VIP', center: 'Орталық', side: 'Бүйір', east: 'Шығыс', end: 'Қақпа артында', away: 'Қонақтар', my: 'Стадион билеттері', lodge: 'Ложа', west: 'Батыс', upper: 'Жоғарғы ярус (C)', lower: 'Төменгі ярус (B)', premium: 'Премиум (A)', A: 'Премиум, төменгі ярус', B: 'Төменгі ярус', C: 'Жоғарғы ярус', arena_d: 'Мұз аренасы: хоккей, A/B/C секторлары, 3D орыннан көрініс', arena_note: 'Секторлар арена картасы бойынша; орын саны шамамен.', stage_ice: 'МҰЗ АЛАҢЫ', main_entrance: 'Басты кіреберіс', central_d: 'Стадион: «Қайрат» матчтары, 60 сектор, 3D трибунадан көрініс', oval_note: 'Секторлар стадионның ресми картасы бойынша; орын саны шамамен.',
       W: 'Батыс трибуна', E: 'Шығыс трибуна', N: 'Солтүстік трибуна', S: 'Оңтүстік трибуна',
     },
     ru: {
@@ -22,7 +22,7 @@
       from: 'от {p}', choose_sector: 'Выберите сектор', sector: 'Сектор', row: 'Ряд', seat: 'Место', free: 'свободно',
       v3d: 'Вид в 3D', buy: 'Купить · {p}', pick_seats: 'Выберите места (до 6)', approx: 'Схема приблизительная: официальные секторы не опубликованы.',
       pay_title: 'Оплата', done: 'Билет готов!', to_pitch: 'до центра поля', height: 'высота', angle: 'угол обзора', back: 'Назад',
-      vip: 'VIP', center: 'Центр', side: 'Боковой', east: 'Восток', end: 'За воротами', away: 'Гостевой', my: 'Билеты на стадион', lodge: 'Ложа', west: 'Запад', upper: 'верхний ярус', lower: 'нижний ярус', central_d: 'Стадион: матчи «Кайрата», 60 секторов, вид с трибуны в 3D', oval_note: 'Секторы — по официальной карте стадиона; число мест приблизительное.',
+      vip: 'VIP', center: 'Центр', side: 'Боковой', east: 'Восток', end: 'За воротами', away: 'Гостевой', my: 'Билеты на стадион', lodge: 'Ложа', west: 'Запад', upper: 'Верхний ярус (C)', lower: 'Нижний ярус (B)', premium: 'Премиум (A)', A: 'Премиум, нижний ярус', B: 'Нижний ярус', C: 'Верхний ярус', arena_d: 'Ледовая арена: хоккей, секторы A/B/C, вид с места в 3D', arena_note: 'Секторы — по карте арены; число мест приблизительное.', stage_ice: 'ЛЁД', main_entrance: 'Главный вход', central_d: 'Стадион: матчи «Кайрата», 60 секторов, вид с трибуны в 3D', oval_note: 'Секторы — по официальной карте стадиона; число мест приблизительное.',
       W: 'Западная трибуна', E: 'Восточная трибуна', N: 'Северная трибуна', S: 'Южная трибуна',
     },
   };
@@ -34,10 +34,10 @@
     const key = q || `city=${curCity()}`;
     return (cache[key] = cache[key] || await K().api(`/stadium?${key}`));
   };
-  const STADIUM_BY_PREFIX = { m: 'kaisar', c: 'central' };
+  const STADIUM_BY_PREFIX = { m: 'kaisar', c: 'central', h: 'arena' };
   // фото стадиона для карточки и шапки
-  const STADIUM_IMG = { kaisar: '/img/venue-stadium.jpg', central: '/img/venue-central.jpg' };
-  const module3d = (d) => (d.stadium.shape === 'oval' ? window.Oval3D : window.Stadium3D);
+  const STADIUM_IMG = { kaisar: '/img/venue-stadium.jpg', central: '/img/venue-central.jpg', arena: '/img/venue-arena.jpg' };
+  const module3d = (d) => ({ oval: window.Oval3D, arena: window.Arena3D }[d.stadium.shape] || window.Stadium3D);
 
   // ТРЦ с кинотеатром по городам; фото — собственное пользователя или свободные с Wikimedia Commons
   const MALLS = {
@@ -80,7 +80,10 @@
           <small>${s('cinema_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span>${m.credit ? `<span class="hc-credit">${K().esc(m.credit)}</span>` : ''}</a>`).join('')}
         ${city === 'ala' ? `<a class="hub-card hc-photo" href="#/stadium" style="--img:url('/img/venue-central.jpg'); --pos: center 40%"><b>${K().S.lang === 'kk' ? 'Орталық стадион' : 'Центральный стадион'}</b>
           <small class="hc-addr"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>${K().S.lang === 'kk' ? 'Алматы, Сәтбаев көшесі, 29/3' : 'Алматы, ул. Сатпаева, 29/3'}</small>
-          <small>${s('central_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>` : ''}
+          <small>${s('central_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
+        <a class="hub-card hc-photo" href="#/arena" style="--img:url('/img/venue-arena.jpg'); --pos: center 60%"><b>Almaty Arena</b>
+          <small class="hc-addr"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>${K().S.lang === 'kk' ? 'Алматы, Нұркент шағынауданы, 7' : 'Алматы, мкр. Нуркент, 7'}</small>
+          <small>${s('arena_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>` : ''}
         ${local ? `<a class="hub-card hc-photo" href="#/stadium" style="--img:url('/img/venue-stadium.jpg')"><b>${s('stadium')}</b><small>${s('stadium_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
         <a class="hub-card hc-photo" href="#/theatre" style="--img:url('/img/venue-theatre.jpg'); --pos: center 78%"><b>${window.TheatreTX ? window.TheatreTX('hub') : 'Театр'}</b><small>${window.TheatreTX ? window.TheatreTX('hub_d') : ''}</small><span class="btn btn-green btn-sm">${s('open')}</span><span class="hc-credit">Фото: SAKRI, CC BY-SA 4.0</span></a>
 ` : ''}
@@ -90,10 +93,10 @@
   };
 
   // ---------- Стадион: матчи ----------
-  window.StadiumPage = async function StadiumPage(page) {
+  window.StadiumPage = async function StadiumPage(page, q) {
     const { esc, money, L } = K();
     page.className = 'wide';
-    const d = await load();
+    const d = await load(q);
     const minP = Math.min(...d.sectors.map((x) => x.price));
     page.innerHTML = `
       <a class="back" href="#/">‹ 3D Ticket</a>
@@ -105,7 +108,7 @@
   };
 
   // ---------- Стадион: секторы, места, 3D, покупка ----------
-  const SECT_COL = { vip: '#3b5bdb', center: '#5fd38d', side: '#4fb37a', east: '#38a169', end: '#2f855a', away: '#8a94a6', lodge: '#d9741c', west: '#c9a227' };
+  const SECT_COL = { vip: '#3b5bdb', center: '#5fd38d', side: '#4fb37a', east: '#38a169', end: '#2f855a', away: '#8a94a6', lodge: '#d9741c', west: '#c9a227', premium: '#d23a46', lower: '#2f7fd8', upper: '#2f9e5b' };
   function sectorMap(d, sold, sel) {
     // вид сверху: поле в центре, секторы по периметру
     const W = 360, H = 260, cx = W / 2, cy = H / 2, pw = 150, ph = 98;
@@ -158,6 +161,38 @@
       ${out.join('')}</svg>`;
   }
 
+  function arenaMap(d, sold, sel) {
+    const W = 380, H = 300, cx = W / 2, cy = H / 2 + 6, k = 2.4;
+    const HX = 33 * k, HZ = 18 * k, RR = 11 * k;
+    const pt = (a, off) => {
+      const dx = Math.cos(a * Math.PI / 180), dz = Math.sin(a * Math.PI / 180);
+      const hx = HX + off, hz = HZ + off, r = RR + off;
+      let lo = 0, hi = hx + hz + 10;
+      for (let i = 0; i < 24; i++) { const t = (lo + hi) / 2, ex = Math.max(Math.abs(dx * t) - (hx - r), 0), ez = Math.max(Math.abs(dz * t) - (hz - r), 0); if (ex * ex + ez * ez <= r * r) lo = t; else hi = t; }
+      return [cx + dx * lo, cy + dz * lo];
+    };
+    const band = (sec) => (sec.tier ? [44, 70] : [6, 36]);
+    const path = (pts) => `M${pts.map((p) => p.map((v) => v.toFixed(1)).join(',')).join('L')}Z`;
+    const out = d.sectors.map((sec) => {
+      const [r0, r1] = band(sec), N = 8, pts = [], g = 0.6;
+      for (let i = 0; i <= N; i++) pts.push(pt(sec.a0 + g + ((sec.a1 - sec.a0 - 2 * g) * i) / N, r0));
+      for (let i = N; i >= 0; i--) pts.push(pt(sec.a0 + g + ((sec.a1 - sec.a0 - 2 * g) * i) / N, r1));
+      const mid = pt((sec.a0 + sec.a1) / 2, (r0 + r1) / 2);
+      const free = sec.rows * sec.seats - (sold[sec.id] || 0);
+      return `<g class="sec${sel === sec.id ? ' on' : ''}" data-sec="${sec.id}" role="button" tabindex="0" aria-label="${s('sector')} ${sec.id}">
+        <path d="${path(pts)}" fill="${SECT_COL[sec.kind]}"/><text x="${mid[0].toFixed(1)}" y="${(mid[1] + 3).toFixed(1)}" text-anchor="middle">${sec.id}</text><title>${sec.id} · ${free} ${s('free')}</title></g>`;
+    });
+    const rink = (off) => { const a = []; for (let i = 0; i <= 90; i++) a.push(pt(i * 4, off)); return path(a); };
+    const ice = (() => { const a = []; const kx = 30 * k, kz = 15 * k, kr = 8.5 * k; for (let i = 0; i <= 90; i++) { const ang = i * 4 * Math.PI / 180, dx = Math.cos(ang), dz = Math.sin(ang); let lo = 0, hi = kx + kz; for (let j = 0; j < 22; j++) { const t = (lo + hi) / 2, ex = Math.max(Math.abs(dx * t) - (kx - kr), 0), ez = Math.max(Math.abs(dz * t) - (kz - kr), 0); if (ex * ex + ez * ez <= kr * kr) lo = t; else hi = t; } a.push([cx + dx * lo, cy + dz * lo]); } return path(a); })();
+    return `<svg class="st-map st-oval" viewBox="0 0 ${W} ${H}">
+      <path d="${rink(-1)}" fill="#22252c"/><path d="${ice}" fill="#eef4f8"/>
+      <line x1="${cx}" y1="${cy - 36}" x2="${cx}" y2="${cy + 36}" stroke="#c8202c" stroke-width="1.6"/>
+      <line x1="${cx - 21}" y1="${cy - 36}" x2="${cx - 21}" y2="${cy + 36}" stroke="#1f56b5" stroke-width="1.4"/><line x1="${cx + 21}" y1="${cy - 36}" x2="${cx + 21}" y2="${cy + 36}" stroke="#1f56b5" stroke-width="1.4"/>
+      <circle cx="${cx}" cy="${cy}" r="10" fill="none" stroke="#1f56b5" stroke-width="1.2"/>
+      <text class="st-stand" x="${cx}" y="12" text-anchor="middle">▼ ${s('main_entrance')}</text>
+      ${out.join('')}</svg>`;
+  }
+
   window.StadiumMatchPage = async function StadiumMatchPage(page, mid) {
     const { api, esc, money, L, toast, errMsg, S } = K();
     page.className = 'mid';
@@ -168,13 +203,13 @@
     const draw = async () => {
       const sec = secId && d.sectors.find((x) => x.id === secId);
       page.innerHTML = `
-        <a class="back" href="#/stadium">‹ ${s('back')}</a>
+        <a class="back" href="${d.stadium.id === 'arena' ? '#/arena' : '#/stadium'}">‹ ${s('back')}</a>
         <h1>${esc(info.match.home)} — ${esc(info.match.away)}</h1>
         <p class="muted">${fmtDay(info.match.date)} · ${info.match.time} · ${esc(L(d.stadium.name))}</p>
         <h3>${s('choose_sector')}</h3>
-        ${d.stadium.shape === 'oval' ? ovalMap(d, info.sold, secId) : sectorMap(d, info.sold, secId)}
+        ${d.stadium.shape === 'oval' ? ovalMap(d, info.sold, secId) : d.stadium.shape === 'arena' ? arenaMap(d, info.sold, secId) : sectorMap(d, info.sold, secId)}
         <div class="st-legend">${[...new Set(d.sectors.map((x) => x.kind))].map((k) => `<span><i style="background:${SECT_COL[k]}"></i>${s(k)} · ${money(d.sectors.find((x) => x.kind === k).price)}</span>`).join('')}</div>
-        <p class="small muted">${d.stadium.shape === 'oval' ? s('oval_note') : s('approx')}</p>
+        <p class="small muted">${({ oval: s('oval_note'), arena: s('arena_note') })[d.stadium.shape] || s('approx')}</p>
         ${sec ? `<section class="card st-seats"><h3>${s('sector')} ${sec.id} · ${s(sec.stand)} · ${money(sec.price)}</h3><p class="small muted">${s('pick_seats')}</p>
           <div class="st-grid" style="--n:${sec.seats}">${Array.from({ length: sec.rows }, (_, ri) => {
             const r = sec.rows - ri;
