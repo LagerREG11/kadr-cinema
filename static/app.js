@@ -382,12 +382,14 @@
   async function pageHome(page) {
     page.className = 'wide';
     const c = S.cat.cinema;
+    const mall = window.currentMall && window.currentMall();
+    const place = mall ? L(mall.addr) : `${cityName(S.city)}, ${L(c.address)}`;
     page.innerHTML = `
-      <section class="hero">
+      <section class="hero${mall ? ' hero-mall' : ''}"${mall ? ` style="--img:url('${mall.img}'); --pos:${mall.pos || 'center'}"` : ''}>
         <div class="hero-art" aria-hidden="true"><div class="hero-screen"></div>${[...Array(5)].map(() => '<i></i>').join('')}</div>
         <div class="hero-in">
-          <h1>${esc(c.name)}</h1>
-          <p class="muted"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>${esc(cityName(S.city))}, ${esc(L(c.address))}</p>
+          <h1>${esc(c.name)}${mall ? ` <span class="hero-mall-name">· ${esc(mall.name)}</span>` : ''}</h1>
+          <p class="muted"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>${esc(place)}</p>
           <div class="chips">${Object.values(S.cat.halls).map((hl) => `<span class="chip">${esc(hl.name)} · ${esc(hl.format)}</span>`).join('')}</div>
         </div>
       </section>
@@ -492,7 +494,7 @@
       <p>${t('about_text')}</p>
       <div class="about-grid">
         <div class="info-card"><h4>${t('halls_title')}</h4>${Object.values(S.cat.halls).map((hl) => `<p>${esc(hl.name)} — ${esc(hl.format)}, 126 + VIP</p>`).join('')}</div>
-        <div class="info-card"><h4>${t('address')}</h4><p>${esc(cityName(S.city))}, ${esc(L(c.address))}</p><h4>${t('hours')}</h4><p>${esc(c.hours)}</p></div>
+        <div class="info-card"><h4>${t('address')}</h4><p>${esc(window.currentMall && window.currentMall() ? window.currentMall().name + ', ' + L(window.currentMall().addr) : cityName(S.city) + ', ' + L(c.address))}</p><h4>${t('hours')}</h4><p>${esc(c.hours)}</p></div>
         <div class="info-card"><h4>${t('contacts')}</h4><p>${esc(c.phone)}</p></div>
       </div>
     </div>`;

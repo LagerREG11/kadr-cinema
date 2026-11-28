@@ -909,6 +909,11 @@ body.kids .logo-mark { background: linear-gradient(135deg, #ffcf5c, #ff7ab6); }
 .hc-photo small { color: #ece9ef; }
 .hc-photo:hover { transform: translateY(-3px) scale(1.01); }
 .hc-tag { align-self: flex-start; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; }
+.hc-addr { display: flex; align-items: flex-start; gap: 4px; font-weight: 600; color: #fff !important; }
+.hc-addr .ico { width: 14px; height: 14px; flex: none; margin-top: 2px; fill: none; stroke: currentColor; stroke-width: 2; }
+.hero-mall { background: linear-gradient(90deg, rgba(11,10,12,.92) 0%, rgba(11,10,12,.65) 55%, rgba(11,10,12,.35) 100%), var(--img) var(--pos, center) / cover no-repeat; }
+.hero-mall .hero-art { opacity: .25; }
+.hero-mall-name { color: var(--green); }
 .hc-credit { position: absolute; right: 12px; bottom: 8px; font-size: 9px; color: rgba(255,255,255,.55); }
 .hc-cinema { --img: radial-gradient(90% 70% at 70% 20%, #3a3542 0%, #16151a 70%); }
 .hc-soon { background: repeating-linear-gradient(45deg, #17161a 0 12px, #1c1b20 12px 24px); opacity: .8; }

@@ -4,7 +4,7 @@
   const K = () => window.KADR;
   const TX = {
     kk: {
-      hub_title: '3D Ticket · {c}', hub_sub: '{c}: орындарды 3D-де көріп, билетті онлайн алыңыз.', soon_city: '{c} қаласының 3D нысандары (кинотеатр, стадион, театр т.б.) жақында қосылады',
+      hub_title: '3D Ticket · {c}', hub_sub: '{c}: орындарды 3D-де көріп, билетті онлайн алыңыз.', soon_city: '{c} қаласының 3D нысандары (стадион, театр т.б.) жақында қосылады',
       cinema: 'KADR Cinema', cinema_d: 'Кинотеатр: афиша, орынды таңдау, 3D залдан көрініс', stadium: 'Қайсар Арена', stadium_d: 'Стадион: матчтар, секторлар, 3D трибунадан көрініс',
       soon: 'Жақында', soon_d: 'Жаңа 3D нысандар қосылады', open: 'Ашу',
       st_facts: '11 000 орын · алаң 105×68 м · УЕФА IV санаты', matches: 'Матчтар', demo: 'Демо-кесте: нақты матчтар емес',
@@ -15,7 +15,7 @@
       W: 'Батыс трибуна', E: 'Шығыс трибуна', N: 'Солтүстік трибуна', S: 'Оңтүстік трибуна',
     },
     ru: {
-      hub_title: '3D Ticket · {c}', hub_sub: '{c}: смотрите места в 3D и покупайте билеты онлайн.', soon_city: '3D-объекты города {c} (кинотеатр, стадион, театр и др.) появятся скоро',
+      hub_title: '3D Ticket · {c}', hub_sub: '{c}: смотрите места в 3D и покупайте билеты онлайн.', soon_city: '3D-объекты города {c} (стадион, театр и др.) появятся скоро',
       cinema: 'KADR Cinema', cinema_d: 'Кинотеатр: афиша, выбор места, вид из зала в 3D', stadium: 'Қайсар Арена', stadium_d: 'Стадион: матчи, секторы, вид с трибуны в 3D',
       soon: 'Скоро', soon_d: 'Добавим новые 3D-объекты', open: 'Открыть',
       st_facts: '11 000 мест · поле 105×68 м · УЕФА IV категория', matches: 'Матчи', demo: 'Демо-расписание: не реальные матчи',
@@ -29,6 +29,30 @@
   const s = (k, v = {}) => ((TX[K().S.lang] || TX.ru)[k] || TX.ru[k] || k).replace(/\{(\w+)\}/g, (_, x) => v[x] ?? '');
   let data = null;
   const load = async () => (data = data || await K().api('/stadium'));
+
+  // ТРЦ с кинотеатром по городам; фото — собственное пользователя или свободные с Wikimedia Commons
+  const MALLS = {
+    kzo: [
+      { id: 'aray', name: 'Aray City Mall', img: '/img/mall-aray.jpg', pos: 'center 40%',
+        addr: { kk: 'Қызылорда, Назарбаев даңғылы, 13А', ru: 'Кызылорда, пр. Назарбаева, 13А' } },
+    ],
+    ala: [
+      { id: 'mega-ala', name: 'MEGA Alma-Ata', img: '/img/mall-mega.jpg', pos: 'center 55%', credit: 'Фото: Anton Yefimov, CC BY 3.0',
+        addr: { kk: 'Алматы, Розыбакиев көшесі, 247А', ru: 'Алматы, ул. Розыбакиева, 247А' } },
+      { id: 'esentai', name: 'Esentai Mall', img: '/img/mall-esentai.jpg', pos: 'left center', credit: 'Фото: Xcite, CC0',
+        addr: { kk: 'Алматы, әл-Фараби даңғылы, 77/8', ru: 'Алматы, пр. аль-Фараби, 77/8' } },
+      { id: 'moskva', name: 'Moskva Metropolitan', img: '/img/mall-moskva.jpg', pos: 'center 30%', credit: 'Фото: Wetowp5029, CC BY 4.0',
+        addr: { kk: 'Алматы, 8-шағынаудан, 37/1', ru: 'Алматы, 8-й микрорайон, 37/1' } },
+    ],
+  };
+  window.MALLS = MALLS;
+  // выбранный ТРЦ текущего города (по умолчанию — первый)
+  window.currentMall = () => {
+    const S = K().S, city = S.city || (S.cat && S.cat.default_city) || 'kzo';
+    const list = MALLS[city] || [];
+    let id = null; try { id = localStorage.getItem('mall'); } catch (e) { /* ignore */ }
+    return list.find((m) => m.id === id) || list[0] || null;
+  };
   const fmtDay = (iso) => K().fmtDay(iso);
 
   // ---------- Главная 3D Ticket ----------
@@ -41,12 +65,16 @@
     page.innerHTML = `
       <section class="hub-hero"><h1>${s('hub_title', { c })}</h1><p class="muted">${s('hub_sub', { c })}</p></section>
       <div class="hub-grid">
-        ${local ? `<a class="hub-card hc-photo" href="#/cinema" style="--img:url('/img/venue-mall.jpg'); --pos: center 40%"><span class="hc-tag">${s('cinema')}</span><b>Aray City Mall</b><small>${s('cinema_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
-        <a class="hub-card hc-photo" href="#/stadium" style="--img:url('/img/venue-stadium.jpg')"><b>${s('stadium')}</b><small>${s('stadium_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
+        ${(MALLS[city] || []).map((m) => `<a class="hub-card hc-photo" href="#/cinema" data-mall="${m.id}" style="--img:url('${m.img}'); --pos: ${m.pos || 'center'}">
+          <span class="hc-tag">${s('cinema')}</span><b>${K().esc(m.name)}</b>
+          <small class="hc-addr"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>${K().esc(K().L(m.addr))}</small>
+          <small>${s('cinema_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span>${m.credit ? `<span class="hc-credit">${K().esc(m.credit)}</span>` : ''}</a>`).join('')}
+        ${local ? `<a class="hub-card hc-photo" href="#/stadium" style="--img:url('/img/venue-stadium.jpg')"><b>${s('stadium')}</b><small>${s('stadium_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
         <a class="hub-card hc-photo" href="#/theatre" style="--img:url('/img/venue-theatre.jpg'); --pos: center 78%"><b>${window.TheatreTX ? window.TheatreTX('hub') : 'Театр'}</b><small>${window.TheatreTX ? window.TheatreTX('hub_d') : ''}</small><span class="btn btn-green btn-sm">${s('open')}</span><span class="hc-credit">Фото: SAKRI, CC BY-SA 4.0</span></a>
 ` : ''}
         <div class="hub-card hc-soon"><span class="hc-art">✨</span><b>${s('soon')}</b><small>${local ? s('soon_d') : s('soon_city', { c })}</small></div>
       </div>`;
+    page.querySelectorAll('[data-mall]').forEach((a) => a.addEventListener('click', () => { try { localStorage.setItem('mall', a.dataset.mall); } catch (e) { /* ignore */ } }));
   };
 
   // ---------- Стадион: матчи ----------
