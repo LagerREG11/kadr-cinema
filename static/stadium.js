@@ -41,7 +41,7 @@
     page.innerHTML = `
       <section class="hub-hero"><h1>${s('hub_title', { c })}</h1><p class="muted">${s('hub_sub', { c })}</p></section>
       <div class="hub-grid">
-        <a class="hub-card hc-photo hc-cinema" href="#/cinema"><span class="hc-tag">${s('cinema')}</span><b>Arai City Mall</b><small>${s('cinema_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
+        <a class="hub-card hc-photo" href="#/cinema" style="--img:url('/img/venue-mall.jpg'); --pos: center 40%"><span class="hc-tag">${s('cinema')}</span><b>Aray City Mall</b><small>${s('cinema_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
         ${local ? `<a class="hub-card hc-photo" href="#/stadium" style="--img:url('/img/venue-stadium.jpg')"><b>${s('stadium')}</b><small>${s('stadium_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
         <a class="hub-card hc-photo" href="#/theatre" style="--img:url('/img/venue-theatre.jpg'); --pos: center 78%"><b>${window.TheatreTX ? window.TheatreTX('hub') : 'Театр'}</b><small>${window.TheatreTX ? window.TheatreTX('hub_d') : ''}</small><span class="btn btn-green btn-sm">${s('open')}</span><span class="hc-credit">Фото: SAKRI, CC BY-SA 4.0</span></a>
 ` : ''}
