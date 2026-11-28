@@ -161,7 +161,7 @@
       sheet.addEventListener('pointercancel', () => { sw = null; });
       try { if (localStorage.getItem('stSheetMin') === '1') setMin(true); } catch (e) { /* ignore */ }
       if (!window.Stadium3D.available()) { view.querySelector('.sheet').classList.add('open'); return; }
-      window.Stadium3D.open(view.querySelector('canvas'), { sectors: d.sectors, taken: { [sec.id]: [...taken] }, sector: sec, row: r, seat: k,
+      window.Stadium3D.open(view.querySelector('canvas'), { sectors: d.sectors, taken: { [sec.id]: [...taken] }, sector: sec, row: r, seat: k, match: info.match,
         onArrive: () => view.querySelector('.sheet').classList.add('open') });
     };
     const payForm = (sec) => {

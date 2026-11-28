@@ -74,7 +74,7 @@ def matches(today: date) -> list[dict]:
     d = today + timedelta(days=(5 - today.weekday()) % 7 or 7)  # ближайшая суббота
     for k in range(6):
         day = d + timedelta(days=7 * k + (1 if k % 3 == 2 else 0))
-        hh = 18 if k % 2 == 0 else 16
+        hh = (18, 15, 13, 20, 16, 19)[k]  # днём, на закате и вечером
         out.append({
             "id": f"m{day:%Y%m%d}",
             "date": day.isoformat(),

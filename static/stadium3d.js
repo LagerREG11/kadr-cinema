@@ -32,6 +32,35 @@
     return { dist: Math.hypot(p.x, p.z), height: p.y, toEdge, angle: Math.round(Math.atan2(p.y, toEdge) * 180 / Math.PI) };
   }
 
+  // высота и азимут солнца над Кызылордой (44.85° с.ш., 65.51° в.д., UTC+5) в момент матча
+  function sunAt(dateStr, timeStr) {
+    const d = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+    const [hh, mm] = (timeStr || '18:00').split(':').map(Number);
+    const N = Math.round((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
+    const rad = Math.PI / 180, lat = 44.85 * rad;
+    const decl = 23.44 * rad * Math.sin(2 * Math.PI * (284 + N) / 365);
+    const B = 2 * Math.PI * (N - 81) / 364;
+    const eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
+    const solar = hh + mm / 60 + (4 * (65.51 - 75) + eot) / 60;
+    const H = 15 * (solar - 12) * rad;
+    const el = Math.asin(Math.sin(lat) * Math.sin(decl) + Math.cos(lat) * Math.cos(decl) * Math.cos(H));
+    const az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(lat) - Math.tan(decl) * Math.cos(lat));
+    return { el: el / rad, az };
+  }
+  const lerp = (a, b, t) => a + (b - a) * t;
+  function mixHex(a, b, t) {
+    const ca = new THREE.Color(a), cb = new THREE.Color(b);
+    return ca.lerp(cb, clamp(t, 0, 1));
+  }
+  // палитра неба по высоте солнца: ночь → сумерки → закат → день
+  function skyColors(el) {
+    const keys = [[-18, '#02040d', '#141c3f'], [-8, '#08113a', '#3a3f7a'], [-2, '#1f3a78', '#e0805a'], [4, '#5b86c2', '#f5c08c'], [15, '#3f7fd0', '#cfe2f3'], [90, '#2f6fc8', '#bcd7f0']];
+    let i = 0; while (i < keys.length - 2 && el > keys[i + 1][0]) i++;
+    const [e0, t0, h0] = keys[i], [e1, t1, h1] = keys[i + 1];
+    const k = clamp((el - e0) / (e1 - e0), 0, 1);
+    return { top: mixHex(t0, t1, k), hor: mixHex(h0, h1, k) };
+  }
+
   function canvasTex(w, h, draw) {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     draw(c.getContext('2d'), w, h);
@@ -40,7 +69,7 @@
   function pitchTexture() {
     return canvasTex(1260, 840, (g, W, H) => {
       const sx = W / 120, sy = H / 80;
-      for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#2f8a3c' : '#36994a'; g.fillRect(i * W / 16, 0, W / 16 + 1, H); }
+      for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#1f6a2a' : '#257631'; g.fillRect(i * W / 16, 0, W / 16 + 1, H); }
       g.strokeStyle = '#f4f7f2'; g.fillStyle = '#f4f7f2'; g.lineWidth = 4;
       const X = (m) => (m + 60) * sx, Y = (m) => (m + 40) * sy;
       g.strokeRect(X(-52.5), Y(-34), 105 * sx, 68 * sy);
@@ -69,37 +98,62 @@
     return m;
   }
 
-  function build(sectors, takenBySector) {
+  function build(sectors, takenBySector, match) {
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x070b1c);
+    const sun = sunAt(match && match.date, match && match.time);
+    const el = sun.el, day = clamp((el + 2) / 14, 0, 1), night = clamp((-el - 3) / 9, 0, 1);
+    const sc = skyColors(el);
+    scene.background = sc.hor.clone();
+    const css = (c) => '#' + c.getHexString();
     const skyTex = canvasTex(2048, 1024, (g, w, h) => {
       const gr = g.createLinearGradient(0, 0, 0, h);
-      gr.addColorStop(0, '#02040d'); gr.addColorStop(0.45, '#0a1230'); gr.addColorStop(0.5, '#1a2350'); gr.addColorStop(1, '#0a0d1a');
+      gr.addColorStop(0, css(sc.top)); gr.addColorStop(0.47, css(sc.hor)); gr.addColorStop(0.5, css(sc.hor)); gr.addColorStop(1, '#14130f');
       g.fillStyle = gr; g.fillRect(0, 0, w, h);
-      for (let i = 0; i < 2600; i++) {
-        const r = Math.random() < 0.06 ? 1.6 : 0.8;
-        g.fillStyle = `rgba(255,255,255,${0.35 + Math.random() * 0.65})`;
-        g.beginPath(); g.arc(Math.random() * w, Math.random() * h * 0.5, r, 0, Math.PI * 2); g.fill();
+      if (night > 0) {
+        for (let i = 0; i < 2600; i++) {
+          const r = Math.random() < 0.06 ? 1.6 : 0.8;
+          g.fillStyle = `rgba(255,255,255,${(0.35 + Math.random() * 0.65) * night})`;
+          g.beginPath(); g.arc(Math.random() * w, Math.random() * h * 0.46, r, 0, Math.PI * 2); g.fill();
+        }
       }
     });
     scene.add(new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false, toneMapped: false })));
-    const moonTex = canvasTex(256, 256, (g, w) => {
-      const gr = g.createRadialGradient(w / 2, w / 2, 20, w / 2, w / 2, w / 2);
-      gr.addColorStop(0, 'rgba(255,250,230,1)'); gr.addColorStop(0.32, 'rgba(255,248,225,1)'); gr.addColorStop(0.36, 'rgba(200,210,255,.35)'); gr.addColorStop(1, 'rgba(120,140,255,0)');
-      g.fillStyle = gr; g.fillRect(0, 0, w, w);
-      g.fillStyle = 'rgba(210,205,190,.55)'; [[110, 100, 14], [150, 140, 10], [120, 150, 7]].forEach(([x, y, r]) => { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); });
-    });
-    const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, fog: false, toneMapped: false, depthWrite: false }));
-    moon.scale.set(120, 120, 1); moon.position.set(-420, 330, -520); scene.add(moon);
-    scene.fog = new THREE.Fog(0x0a1028, 500, 1300);
-    scene.add(new THREE.HemisphereLight(0xf2f6ff, 0x2a2f3a, 0.9));
+    const sunDir = new THREE.Vector3(-Math.sin(sun.az) * Math.cos(el * Math.PI / 180), Math.sin(el * Math.PI / 180), Math.cos(sun.az) * Math.cos(el * Math.PI / 180)).normalize();
+    if (el > -4) { // солнце (у горизонта — крупное и тёплое)
+      const low = clamp(1 - el / 20, 0, 1);
+      const sunTex = canvasTex(256, 256, (g, w) => {
+        const gr = g.createRadialGradient(w / 2, w / 2, 8, w / 2, w / 2, w / 2);
+        gr.addColorStop(0, 'rgba(255,253,240,1)'); gr.addColorStop(0.18, `rgba(255,${Math.round(lerp(245, 200, low))},${Math.round(lerp(220, 140, low))},1)`);
+        gr.addColorStop(0.3, `rgba(255,${Math.round(lerp(230, 160, low))},120,.45)`); gr.addColorStop(1, 'rgba(255,170,90,0)');
+        g.fillStyle = gr; g.fillRect(0, 0, w, w);
+      });
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, fog: false, toneMapped: false, depthWrite: false }));
+      sp.scale.set(lerp(140, 220, low), lerp(140, 220, low), 1); sp.position.copy(sunDir).multiplyScalar(800); scene.add(sp);
+    }
+    if (night > 0.2) { // луна
+      const moonTex = canvasTex(256, 256, (g, w) => {
+        const gr = g.createRadialGradient(w / 2, w / 2, 20, w / 2, w / 2, w / 2);
+        gr.addColorStop(0, 'rgba(255,250,230,1)'); gr.addColorStop(0.32, 'rgba(255,248,225,1)'); gr.addColorStop(0.36, 'rgba(200,210,255,.35)'); gr.addColorStop(1, 'rgba(120,140,255,0)');
+        g.fillStyle = gr; g.fillRect(0, 0, w, w);
+        g.fillStyle = 'rgba(210,205,190,.55)'; [[110, 100, 14], [150, 140, 10], [120, 150, 7]].forEach(([x, y, r]) => { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); });
+      });
+      const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, fog: false, toneMapped: false, depthWrite: false, opacity: night }));
+      moon.scale.set(110, 110, 1); moon.position.set(-420, 330, -520); scene.add(moon);
+    }
+    scene.fog = new THREE.Fog(sc.hor.getHex(), 500, 1300);
+    scene.add(new THREE.HemisphereLight(sc.top.clone().lerp(new THREE.Color(0xffffff), 0.6), 0x2a2620, lerp(0.35, 0.6, day)));
+    if (el > -2) {
+      const sl = new THREE.DirectionalLight(mixHex('#ffb070', '#fff6e8', el / 25), lerp(0.2, 1.1, day));
+      sl.position.copy(sunDir).multiplyScalar(300); scene.add(sl);
+    }
+    // прожекторы стадиона: на полную в сумерках и ночью
+    const flood = lerp(0.25, 0.85, clamp(1 - el / 6, 0, 1));
     [[-60, -45], [60, -45], [-60, 45], [60, 45]].forEach(([x, z]) => {
-      const sp = new THREE.SpotLight(0xffffff, 1.4, 260, Math.PI / 3.2, 0.5, 1);
+      const sp = new THREE.SpotLight(0xffffff, flood, 260, Math.PI / 3.2, 0.5, 1);
       sp.position.set(x * 1.15, 26, z * 1.25); sp.target.position.set(x * 0.25, 0, z * 0.2);
       scene.add(sp, sp.target);
     });
-    const moonLight = new THREE.DirectionalLight(0x9fb4ff, 0.25);
-    moonLight.position.set(-420, 330, -520); scene.add(moonLight);
+    if (night > 0) { const ml = new THREE.DirectionalLight(0x9fb4ff, 0.2 * night); ml.position.set(-420, 330, -520); scene.add(ml); }
 
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshStandardMaterial({ color: 0x3a3630, roughness: 1 }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = -0.05; scene.add(ground);
@@ -113,8 +167,8 @@
     });
 
     // чаша трибун: ступенчатое бетонное основание (кольцо на каждый ряд)
-    const concrete = new THREE.MeshStandardMaterial({ color: 0xa3a3a7, roughness: 0.95 });
-    const wallPanel = new THREE.MeshStandardMaterial({ color: 0xc9ccd0, roughness: 0.9 });
+    const concrete = new THREE.MeshStandardMaterial({ color: 0x86888d, roughness: 0.95 });
+    const wallPanel = new THREE.MeshStandardMaterial({ color: 0xb4b6b9, roughness: 0.9 });
     const standBlock = (len, out0, horiz) => {
       for (let r = 0; r < ROWS; r++) {
         const h = FIRST_H + r * ROW_H;
@@ -141,7 +195,7 @@
     const seatMat = new THREE.MeshStandardMaterial({ roughness: 0.55 });
     const seats = new THREE.InstancedMesh(new THREE.BoxGeometry(0.42, 0.07, 0.36), seatMat, total);
     const backs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.42, 0.38, 0.05), seatMat, total);
-    const MOSAIC = [0xf2c230, 0x2b5fb8, 0xe9ecef, 0xf2c230, 0x2b5fb8];
+    const MOSAIC = [0xe6b012, 0x1f4fa8, 0xd9dde2, 0xe6b012, 0x1f4fa8];
     const dummy = new THREE.Object3D(), col = new THREE.Color();
     let n = 0;
     sectors.forEach((sec) => {
@@ -226,9 +280,9 @@
     const ry = FIRST_H + ROWS * ROW_H + 8;
     const outerR = [PL / 2 + GAP_END + DEPTH + 4, PW / 2 + GAP_SIDE + DEPTH + 4, 34];
     const innerR = [PL / 2 + GAP_END + 3, PW / 2 + GAP_SIDE + 2, 16];
-    const roof = ring(outerR, innerR, 0.6, new THREE.MeshStandardMaterial({ color: 0xd9c296, roughness: 0.85, side: THREE.DoubleSide }));
+    const roof = ring(outerR, innerR, 0.6, new THREE.MeshStandardMaterial({ color: 0x8e8f8c, metalness: 0.3, roughness: 0.7, side: THREE.DoubleSide }));
     roof.position.y = ry; scene.add(roof);
-    const fins = new THREE.InstancedMesh(new THREE.BoxGeometry(0.25, 3.4, 0.25), new THREE.MeshStandardMaterial({ color: 0xf6f6f2, roughness: 0.5 }), 140);
+    const fins = new THREE.InstancedMesh(new THREE.BoxGeometry(0.25, 3.4, 0.25), new THREE.MeshStandardMaterial({ color: 0xd8c27a, metalness: 0.4, roughness: 0.5 }), 140);
     for (let i = 0; i < 140; i++) {
       const a = (i / 140) * Math.PI * 2;
       const k = 1 / Math.max(Math.abs(Math.cos(a)) / innerR[0], Math.abs(Math.sin(a)) / innerR[1]);
@@ -238,7 +292,7 @@
     }
     scene.add(fins);
     const lightRing = ring([innerR[0] + 0.6, innerR[1] + 0.6, innerR[2] + 0.6], [innerR[0], innerR[1], innerR[2]], 0.3,
-      new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
+      new THREE.MeshBasicMaterial({ color: el < 6 ? 0xffffff : 0x9a9a96, toneMapped: el >= 6 }));
     lightRing.position.y = ry - 0.35; scene.add(lightRing);
 
     // жёлтый решётчатый фасад
@@ -252,16 +306,34 @@
     const fac = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 128, 1, true), new THREE.MeshStandardMaterial({ map: facadeTex, roughness: 0.7, side: THREE.DoubleSide }));
     fac.scale.set(outerR[0] + 6, ry, outerR[1] + 6); fac.position.y = ry / 2; scene.add(fac);
 
-    // табло над северной трибуной
-    const bx = PL / 2 + GAP_END + DEPTH + 0.5;
-    const board = new THREE.Mesh(new THREE.BoxGeometry(1, 6, 18), new THREE.MeshBasicMaterial({ color: 0x0c0d10 }));
-    const cxp = PL / 2 + GAP_END + 6, czp = PW / 2 + GAP_SIDE + 6;
-    board.position.set(cxp, ry - 6, czp); board.lookAt(0, ry - 6, 0); board.rotateY(Math.PI / 2); scene.add(board);
-    const scr = new THREE.Mesh(new THREE.PlaneGeometry(16, 4.6), new THREE.MeshBasicMaterial({ toneMapped: false, map: canvasTex(512, 148, (g, w, h) => {
-      g.fillStyle = '#05070a'; g.fillRect(0, 0, w, h); g.fillStyle = '#5fd38d'; g.font = 'bold 56px Arial'; g.textAlign = 'center';
-      g.fillText('ҚАЙСАР  0 : 0', w / 2, h / 2 + 20);
-    }) }));
-    scr.position.set(cxp - 0.7, ry - 6, czp - 0.55); scr.lookAt(0, ry - 6, 0); scene.add(scr);
+    // большие LED-экраны на стене в открытых углах между трибунами (как на фото), по диагонали
+    const away = (match && match.away) || '';
+    const screenTex = canvasTex(1024, 512, (g, w, h) => {
+      const gr = g.createLinearGradient(0, 0, w, h); gr.addColorStop(0, '#5a0f3c'); gr.addColorStop(1, '#16091f');
+      g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      g.fillStyle = '#f2c230'; g.fillRect(0, 0, w, 14); g.fillRect(0, h - 14, w, 14);
+      g.textAlign = 'center'; g.fillStyle = '#ffffff';
+      g.font = 'bold 54px Arial'; g.fillText('ҚАЙСАР АРЕНА', w / 2, 110);
+      g.font = 'bold 96px Arial'; g.fillStyle = '#f2c230'; g.fillText('ҚАЙСАР  0 : 0', w / 2, 270);
+      g.font = 'bold 60px Arial'; g.fillStyle = '#ffffff'; g.fillText(away.toUpperCase(), w / 2, 360);
+      g.font = '40px Arial'; g.fillStyle = '#d9c3ff'; g.fillText(((match && match.time) || '') + '  ·  Премьер-лига', w / 2, 440);
+    });
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x1a1b1e, roughness: 0.6 });
+    const cx0 = 57.5, cz0 = 40.5; // внутри фасада, между краями трибун
+    [[1, 1], [-1, -1]].forEach(([sx, sz]) => {
+      const g = new THREE.Group();
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(22, FIRST_H + ROWS * ROW_H + 7, 0.6), wallPanel);
+      wall.position.set(0, (FIRST_H + ROWS * ROW_H + 7) / 2, -1.2);
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(17.2, 9.2, 0.6), frameMat); frame.position.set(0, 12, -0.5);
+      const scr = new THREE.Mesh(new THREE.PlaneGeometry(16, 8), new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false }));
+      scr.position.set(0, 12, -0.15);
+      const sub = new THREE.Mesh(new THREE.BoxGeometry(12, 6.6, 3), wallPanel); sub.position.set(0, 3.3, -0.2);
+      const gate = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 3.4), frameMat); gate.position.set(0, 1.7, 1.31);
+      g.add(wall, frame, scr, sub, gate);
+      g.position.set(sx * cx0, 0, sz * cz0);
+      g.lookAt(0, 0, 0);
+      scene.add(g);
+    });
     return { scene };
   }
 
@@ -280,9 +352,9 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 0.9;
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2000);
-    const built = build(opts.sectors, opts.taken || {});
+    const built = build(opts.sectors, opts.taken || {}, opts.match);
     ctx = { renderer, camera, ...built, raf: 0 };
     window.addEventListener('resize', resize);
     resize();
