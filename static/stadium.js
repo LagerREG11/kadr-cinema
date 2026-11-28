@@ -131,11 +131,35 @@
       const view = document.createElement('section');
       view.className = 'view';
       view.innerHTML = `<canvas></canvas><button class="view-close icon-btn" aria-label="${s('back')}"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
-        <div class="sheet"><div class="sheet-head"><div><span class="kicker">${s(sec.stand)}</span><h2>${s('sector')} ${sec.id} · ${s('row')} ${r} · ${s('seat')} ${k}</h2><span class="sub">${s(sec.kind)} · ${money(sec.price)}</span></div></div>
-        <div class="stats"><div class="stat"><b>${inf.dist.toFixed(0)} м</b><span>${s('to_pitch')}</span></div><div class="stat"><b>${inf.height.toFixed(1)} м</b><span>${s('height')}</span></div><div class="stat"><b>${inf.angle}°</b><span>${s('angle')}</span></div></div></div>`;
+        <div class="sheet"><button class="handle-btn" aria-expanded="true" aria-label="${K().t('sheet_hide')}"><span class="handle"></span></button>
+        <div class="sheet-mini"><div class="mini-txt"><b>${sec.id} · ${s('row')} ${r} · ${s('seat')} ${k}</b><span>${inf.dist.toFixed(0)} м · ${money(sec.price)}</span></div>
+          <button class="icon-btn mini-open" aria-label="${K().t('sheet_show')}"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button></div>
+        <div class="sheet-body"><div class="sheet-head"><div><span class="kicker">${s(sec.stand)}</span><h2>${s('sector')} ${sec.id} · ${s('row')} ${r} · ${s('seat')} ${k}</h2><span class="sub">${s(sec.kind)} · ${money(sec.price)}</span></div></div>
+        <div class="stats"><div class="stat"><b>${inf.dist.toFixed(0)} м</b><span>${s('to_pitch')}</span></div><div class="stat"><b>${inf.height.toFixed(1)} м</b><span>${s('height')}</span></div><div class="stat"><b>${inf.angle}°</b><span>${s('angle')}</span></div></div></div></div>`;
       document.body.append(view); document.body.classList.add('no-scroll');
       const close = () => { window.Stadium3D.close(); view.remove(); document.body.classList.remove('no-scroll'); };
       view.querySelector('.view-close').addEventListener('click', close);
+      // карточку можно свернуть (полоска / свайп вниз) и вернуть обратно (нажатие / свайп вверх)
+      const sheet = view.querySelector('.sheet'), hb = view.querySelector('.handle-btn');
+      const setMin = (min) => {
+        sheet.classList.toggle('min', min);
+        hb.setAttribute('aria-expanded', String(!min));
+        hb.setAttribute('aria-label', K().t(min ? 'sheet_show' : 'sheet_hide'));
+        try { localStorage.setItem('stSheetMin', min ? '1' : '0'); } catch (e) { /* приватный режим */ }
+      };
+      let sw = null;
+      sheet.addEventListener('pointerdown', (e) => { sw = { y: e.clientY, moved: false }; });
+      sheet.addEventListener('pointermove', (e) => { if (sw && Math.abs(e.clientY - sw.y) > 8) sw.moved = true; });
+      sheet.addEventListener('pointerup', (e) => {
+        if (!sw) return;
+        const dy = e.clientY - sw.y;
+        if (dy > 30) setMin(true);
+        else if (dy < -30) setMin(false);
+        else if (!sw.moved && (e.target.closest('.handle-btn, .mini-open') || sheet.classList.contains('min'))) setMin(!sheet.classList.contains('min'));
+        sw = null;
+      });
+      sheet.addEventListener('pointercancel', () => { sw = null; });
+      try { if (localStorage.getItem('stSheetMin') === '1') setMin(true); } catch (e) { /* ignore */ }
       if (!window.Stadium3D.available()) { view.querySelector('.sheet').classList.add('open'); return; }
       window.Stadium3D.open(view.querySelector('canvas'), { sectors: d.sectors, taken: { [sec.id]: [...taken] }, sector: sec, row: r, seat: k,
         onArrive: () => view.querySelector('.sheet').classList.add('open') });

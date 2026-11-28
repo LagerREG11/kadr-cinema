@@ -9,6 +9,7 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
   const isSide = (sec) => sec.stand === 'W' || sec.stand === 'E';
+  const AISLE = 1.4; // лестничный проход между секторами
 
   // позиция места: sector = {stand, index, count, seats}; row, seat — с 1
   function seatPos(sec, row, seat) {
@@ -17,7 +18,7 @@
     const y = FIRST_H + r * ROW_H;
     const span = isSide(sec) ? 96 : 60;
     const w = span / sec.count;
-    const along = -span / 2 + sec.index * w + (seat - 0.5) * (w / sec.seats);
+    const along = -span / 2 + sec.index * w + AISLE / 2 + (seat - 0.5) * ((w - AISLE) / sec.seats);
     switch (sec.stand) {
       case 'W': return { x: along, y, z: -out };
       case 'E': return { x: -along, y, z: out };
@@ -70,18 +71,37 @@
 
   function build(sectors, takenBySector) {
     const scene = new THREE.Scene();
-    scene.background = canvasTex(4, 256, (g, w, h) => {
+    scene.background = new THREE.Color(0x070b1c);
+    const skyTex = canvasTex(2048, 1024, (g, w, h) => {
       const gr = g.createLinearGradient(0, 0, 0, h);
-      gr.addColorStop(0, '#5d7fb0'); gr.addColorStop(0.55, '#e8b98a'); gr.addColorStop(1, '#f2d2a6');
+      gr.addColorStop(0, '#02040d'); gr.addColorStop(0.45, '#0a1230'); gr.addColorStop(0.5, '#1a2350'); gr.addColorStop(1, '#0a0d1a');
       g.fillStyle = gr; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 2600; i++) {
+        const r = Math.random() < 0.06 ? 1.6 : 0.8;
+        g.fillStyle = `rgba(255,255,255,${0.35 + Math.random() * 0.65})`;
+        g.beginPath(); g.arc(Math.random() * w, Math.random() * h * 0.5, r, 0, Math.PI * 2); g.fill();
+      }
     });
-    scene.fog = new THREE.Fog(0xe8c9a0, 450, 1100);
-    scene.add(new THREE.HemisphereLight(0xfff1dc, 0x6b5a44, 0.7));
-    const sun = new THREE.DirectionalLight(0xffd7a8, 1.1);
-    sun.position.set(-120, 90, -60);
-    scene.add(sun);
+    scene.add(new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false, toneMapped: false })));
+    const moonTex = canvasTex(256, 256, (g, w) => {
+      const gr = g.createRadialGradient(w / 2, w / 2, 20, w / 2, w / 2, w / 2);
+      gr.addColorStop(0, 'rgba(255,250,230,1)'); gr.addColorStop(0.32, 'rgba(255,248,225,1)'); gr.addColorStop(0.36, 'rgba(200,210,255,.35)'); gr.addColorStop(1, 'rgba(120,140,255,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, w, w);
+      g.fillStyle = 'rgba(210,205,190,.55)'; [[110, 100, 14], [150, 140, 10], [120, 150, 7]].forEach(([x, y, r]) => { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); });
+    });
+    const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, fog: false, toneMapped: false, depthWrite: false }));
+    moon.scale.set(120, 120, 1); moon.position.set(-420, 330, -520); scene.add(moon);
+    scene.fog = new THREE.Fog(0x0a1028, 500, 1300);
+    scene.add(new THREE.HemisphereLight(0xf2f6ff, 0x2a2f3a, 0.9));
+    [[-60, -45], [60, -45], [-60, 45], [60, 45]].forEach(([x, z]) => {
+      const sp = new THREE.SpotLight(0xffffff, 1.4, 260, Math.PI / 3.2, 0.5, 1);
+      sp.position.set(x * 1.15, 26, z * 1.25); sp.target.position.set(x * 0.25, 0, z * 0.2);
+      scene.add(sp, sp.target);
+    });
+    const moonLight = new THREE.DirectionalLight(0x9fb4ff, 0.25);
+    moonLight.position.set(-420, 330, -520); scene.add(moonLight);
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshStandardMaterial({ color: 0xb59b7a, roughness: 1 }));
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshStandardMaterial({ color: 0x3a3630, roughness: 1 }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = -0.05; scene.add(ground);
     const pitch = new THREE.Mesh(new THREE.PlaneGeometry(120, 80), new THREE.MeshStandardMaterial({ map: pitchTexture(), roughness: 0.95 }));
     pitch.rotation.x = -Math.PI / 2; scene.add(pitch);
@@ -94,18 +114,34 @@
 
     // чаша трибун: ступенчатое бетонное основание (кольцо на каждый ряд)
     const concrete = new THREE.MeshStandardMaterial({ color: 0xa3a3a7, roughness: 0.95 });
-    for (let r = 0; r < ROWS; r += 2) {
-      const hxI = PL / 2 + GAP_END + r * ROW_D - 0.4, hzI = PW / 2 + GAP_SIDE + r * ROW_D - 0.4;
-      const step = ring([hxI + ROW_D * 2, hzI + ROW_D * 2, 18 + r], [hxI, hzI, 16 + r], FIRST_H + r * ROW_H, concrete);
-      scene.add(step);
-    }
-    // задняя стена чаши
-    const back = ring([PL / 2 + GAP_END + DEPTH + 1.2, PW / 2 + GAP_SIDE + DEPTH + 1.2, 40], [PL / 2 + GAP_END + DEPTH, PW / 2 + GAP_SIDE + DEPTH, 38], FIRST_H + ROWS * ROW_H + 1.5, concrete);
-    scene.add(back);
+    const wallPanel = new THREE.MeshStandardMaterial({ color: 0xc9ccd0, roughness: 0.9 });
+    const standBlock = (len, out0, horiz) => {
+      for (let r = 0; r < ROWS; r++) {
+        const h = FIRST_H + r * ROW_H;
+        [-1, 1].forEach((sg) => {
+          const b = new THREE.Mesh(new THREE.BoxGeometry(horiz ? len : ROW_D, h, horiz ? ROW_D : len), concrete);
+          const o = out0 + r * ROW_D + ROW_D / 2;
+          if (horiz) b.position.set(0, h / 2, sg * o); else b.position.set(sg * o, h / 2, 0);
+          scene.add(b);
+        });
+      }
+    };
+    standBlock(98, PW / 2 + GAP_SIDE - 0.4, true);
+    standBlock(62, PL / 2 + GAP_END - 0.4, false);
+    // высокая светло-серая стена за трибунами и в открытых углах
+    const wallH = FIRST_H + ROWS * ROW_H + 7;
+    const wx = PL / 2 + GAP_END + DEPTH + 0.6, wz = PW / 2 + GAP_SIDE + DEPTH + 0.6;
+    [[wx * 2 + 2, 0, -wz, 0], [wx * 2 + 2, 0, wz, 0], [wz * 2 + 2, wx, 0, Math.PI / 2], [wz * 2 + 2, -wx, 0, Math.PI / 2]].forEach(([len, x, z, ry2]) => {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(len, wallH, 0.5), wallPanel);
+      w.position.set(x, wallH / 2, z); w.rotation.y = ry2; scene.add(w);
+    });
 
     // места: одна InstancedMesh на все ~11 000 кресел
     const total = sectors.reduce((s, x) => s + x.rows * x.seats, 0);
-    const seats = new THREE.InstancedMesh(new THREE.BoxGeometry(0.46, 0.42, 0.42), new THREE.MeshStandardMaterial({ roughness: 0.6 }), total);
+    const seatMat = new THREE.MeshStandardMaterial({ roughness: 0.55 });
+    const seats = new THREE.InstancedMesh(new THREE.BoxGeometry(0.42, 0.07, 0.36), seatMat, total);
+    const backs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.42, 0.38, 0.05), seatMat, total);
+    const MOSAIC = [0xf2c230, 0x2b5fb8, 0xe9ecef, 0xf2c230, 0x2b5fb8];
     const dummy = new THREE.Object3D(), col = new THREE.Color();
     let n = 0;
     sectors.forEach((sec) => {
@@ -113,17 +149,78 @@
       for (let r = 1; r <= sec.rows; r++) {
         for (let k = 1; k <= sec.seats; k++) {
           const p = seatPos(sec, r, k);
-          dummy.position.set(p.x, p.y + 0.21, p.z);
-          dummy.lookAt(isSide(sec) ? p.x : 0, p.y + 0.21, isSide(sec) ? 0 : p.z);
+          dummy.position.set(p.x, p.y + 0.42, p.z);
+          dummy.rotation.set(0, 0, 0);
+          dummy.lookAt(isSide(sec) ? p.x : 0, p.y + 0.42, isSide(sec) ? 0 : p.z);
           dummy.updateMatrix();
           seats.setMatrixAt(n, dummy.matrix);
-          const base = sec.kind === 'vip' ? 0x24345e : sec.kind === 'away' ? 0x7a8292 : ((r * 7 + k * 3) % 11 < 3 ? 0x9aa3ad : 0xd9dde2);
-          seats.setColorAt(n, col.set(taken.has(`${r}-${k}`) ? 0x4a4f57 : base));
+          dummy.translateZ(-0.17); dummy.translateY(0.2); dummy.rotateX(-0.12); dummy.updateMatrix();
+          backs.setMatrixAt(n, dummy.matrix);
+          const hsh = (r * 73856093) ^ (k * 19349663) ^ (sec.index * 83492791);
+          const base = sec.kind === 'vip' ? 0x2b4a8c : MOSAIC[Math.abs(hsh) % MOSAIC.length];
+          col.set(taken.has(`${r}-${k}`) ? 0x3d4148 : base);
+          seats.setColorAt(n, col); backs.setColorAt(n, col);
           n++;
         }
       }
     });
-    scene.add(seats);
+    scene.add(seats, backs);
+
+    // лестничные проходы между секторами: жёлтые кромки ступеней
+    const steps = [];
+    sectors.forEach((sec) => {
+      const side = isSide(sec), span = side ? 96 : 60, w = span / sec.count;
+      const edges = [-span / 2 + sec.index * w];
+      if (sec.index === sec.count - 1) edges.push(span / 2);
+      edges.forEach((along) => {
+        for (let r = 0; r < ROWS; r++) {
+          const out = side ? PW / 2 + GAP_SIDE + r * ROW_D : PL / 2 + GAP_END + r * ROW_D;
+          const y = FIRST_H + r * ROW_H + 0.02;
+          let x, z;
+          if (sec.stand === 'W') { x = along; z = -out; } else if (sec.stand === 'E') { x = -along; z = out; } else if (sec.stand === 'N') { x = out; z = along; } else { x = -out; z = -along; }
+          steps.push([x, y, z, side]);
+        }
+      });
+    });
+    const stepsMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1.2, 0.06, 0.1), new THREE.MeshStandardMaterial({ color: 0xf2c230, emissive: 0x6b5208, emissiveIntensity: 0.4 }), steps.length);
+    steps.forEach(([x, y, z, side], i) => { dummy.position.set(x, y, z); dummy.rotation.set(0, side ? 0 : Math.PI / 2, 0); dummy.updateMatrix(); stepsMesh.setMatrixAt(i, dummy.matrix); });
+    scene.add(stepsMesh);
+
+    // борт с рекламой + защитная сетка 1 м перед первым рядом
+    const netTex = canvasTex(128, 64, (g, w, h) => {
+      g.strokeStyle = 'rgba(235,240,245,.8)'; g.lineWidth = 1.2;
+      for (let x = 0; x <= w; x += 8) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+      for (let y = 0; y <= h; y += 8) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+    });
+    netTex.wrapS = netTex.wrapT = THREE.RepeatWrapping;
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x23272e, roughness: 0.8 });
+    const railMat = new THREE.MeshStandardMaterial({ color: 0xdfe3e8, metalness: 0.4, roughness: 0.3 });
+    const fence = (len, x, z, rotY) => {
+      const g = new THREE.Group();
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(len, FIRST_H, 0.25), wallMat); wall.position.y = FIRST_H / 2;
+      const t = netTex.clone(); t.needsUpdate = true; t.repeat.set(len / 2, 1);
+      const net = new THREE.Mesh(new THREE.PlaneGeometry(len, 1), new THREE.MeshStandardMaterial({ map: t, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+      net.position.y = FIRST_H + 0.5;
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.06, 0.06), railMat); rail.position.y = FIRST_H + 1;
+      g.add(wall, net, rail); g.position.set(x, 0, z); g.rotation.y = rotY; scene.add(g);
+    };
+    fence(98, 0, -(PW / 2 + GAP_SIDE - 0.5), 0); fence(98, 0, PW / 2 + GAP_SIDE - 0.5, 0);
+    fence(62, PL / 2 + GAP_END - 0.5, 0, Math.PI / 2); fence(62, -(PL / 2 + GAP_END - 0.5), 0, Math.PI / 2);
+
+    // скамейки запасных (технические зоны) у западной бровки
+    const benchSeat = new THREE.MeshStandardMaterial({ color: 0xc8202a, roughness: 0.6 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x9fc6ff, transparent: true, opacity: 0.35, roughness: 0.1, side: THREE.DoubleSide });
+    [-11, 11].forEach((bx) => {
+      const g = new THREE.Group();
+      const base = new THREE.Mesh(new THREE.BoxGeometry(9, 0.25, 1.8), wallMat); base.position.y = 0.12;
+      const row = new THREE.Mesh(new THREE.BoxGeometry(8.4, 0.45, 0.6), benchSeat); row.position.set(0, 0.48, -0.35);
+      const backW = new THREE.Mesh(new THREE.BoxGeometry(9, 2.1, 0.08), glass); backW.position.set(0, 1.05, -0.85);
+      const roofG = new THREE.Mesh(new THREE.BoxGeometry(9, 0.08, 1.9), glass); roofG.position.set(0, 2.1, 0); roofG.rotation.x = 0.12;
+      const sideL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.1, 1.8), glass); sideL.position.set(-4.5, 1.05, 0);
+      const sideR = sideL.clone(); sideR.position.x = 4.5;
+      g.add(base, row, backW, roofG, sideL, sideR);
+      g.position.set(bx, 0, -(PW / 2 + 3)); scene.add(g);
+    });
 
     // крыша-козырёк с белыми фермами
     const ry = FIRST_H + ROWS * ROW_H + 8;
@@ -140,6 +237,9 @@
       dummy.updateMatrix(); fins.setMatrixAt(i, dummy.matrix);
     }
     scene.add(fins);
+    const lightRing = ring([innerR[0] + 0.6, innerR[1] + 0.6, innerR[2] + 0.6], [innerR[0], innerR[1], innerR[2]], 0.3,
+      new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
+    lightRing.position.y = ry - 0.35; scene.add(lightRing);
 
     // жёлтый решётчатый фасад
     const facadeTex = canvasTex(512, 128, (g, w, h) => {
@@ -155,12 +255,13 @@
     // табло над северной трибуной
     const bx = PL / 2 + GAP_END + DEPTH + 0.5;
     const board = new THREE.Mesh(new THREE.BoxGeometry(1, 6, 18), new THREE.MeshBasicMaterial({ color: 0x0c0d10 }));
-    board.position.set(bx, ry - 4, 0); scene.add(board);
+    const cxp = PL / 2 + GAP_END + 6, czp = PW / 2 + GAP_SIDE + 6;
+    board.position.set(cxp, ry - 6, czp); board.lookAt(0, ry - 6, 0); board.rotateY(Math.PI / 2); scene.add(board);
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(16, 4.6), new THREE.MeshBasicMaterial({ toneMapped: false, map: canvasTex(512, 148, (g, w, h) => {
       g.fillStyle = '#05070a'; g.fillRect(0, 0, w, h); g.fillStyle = '#5fd38d'; g.font = 'bold 56px Arial'; g.textAlign = 'center';
       g.fillText('ҚАЙСАР  0 : 0', w / 2, h / 2 + 20);
     }) }));
-    scr.rotation.y = -Math.PI / 2; scr.position.set(bx - 0.55, ry - 4, 0); scene.add(scr);
+    scr.position.set(cxp - 0.7, ry - 6, czp - 0.55); scr.lookAt(0, ry - 6, 0); scene.add(scr);
     return { scene };
   }
 
@@ -179,7 +280,7 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.85;
+    renderer.toneMappingExposure = 1.0;
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 2000);
     const built = build(opts.sectors, opts.taken || {});
     ctx = { renderer, camera, ...built, raf: 0 };
