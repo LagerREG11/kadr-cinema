@@ -904,8 +904,13 @@ body.kids .logo-mark { background: linear-gradient(135deg, #ffcf5c, #ff7ab6); }
 .hub-card small { color: #d6d3da; font-size: 13px; }
 .hub-card .btn { align-self: flex-start; margin-top: 8px; }
 .hc-art { font-size: 54px; }
-.hc-cinema { background: radial-gradient(120% 90% at 100% 0%, #6d1018 0%, #1a0d10 60%); }
-.hc-stadium { background: radial-gradient(120% 90% at 100% 0%, #c99a1e 0%, #1f2a1a 65%); }
+.hc-photo { min-height: 250px; background: linear-gradient(180deg, rgba(0,0,0,.05) 0%, rgba(0,0,0,.35) 45%, rgba(0,0,0,.88) 100%), var(--img, none) center / cover no-repeat, #1d1c21; }
+.hc-photo b, .hc-photo small { text-shadow: 0 1px 6px rgba(0,0,0,.7); }
+.hc-photo small { color: #ece9ef; }
+.hc-photo:hover { transform: translateY(-3px) scale(1.01); }
+.hc-tag { align-self: flex-start; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; }
+.hc-credit { position: absolute; right: 12px; bottom: 8px; font-size: 9px; color: rgba(255,255,255,.55); }
+.hc-cinema { --img: radial-gradient(90% 70% at 70% 20%, #3a3542 0%, #16151a 70%); }
 .hc-soon { background: repeating-linear-gradient(45deg, #17161a 0 12px, #1c1b20 12px 24px); opacity: .8; }
 .st-hero { padding: 18px 22px; border-radius: 20px; margin-bottom: 18px; background: linear-gradient(120deg, #2f8a3c 0%, #1f2a1a 55%, #c99a1e 140%); }
 .st-hero h1 { margin: 0 0 4px; }
@@ -932,7 +937,6 @@ body.kids .logo-mark { background: linear-gradient(135deg, #ffcf5c, #ff7ab6); }
 .st-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
 .st-bar span { margin-right: auto; color: var(--muted); }
 .tb-emoji { font-size: 20px; line-height: 22px; }
-.hc-theatre { background: radial-gradient(120% 90% at 100% 0%, #8e1820 0%, #2a1416 60%); }
 /* театр */
 .th-hero { padding: 18px 22px; border-radius: 20px; margin-bottom: 18px; background: linear-gradient(120deg, #8e1820 0%, #2a1416 60%, #d4a63a 150%); }
 .th-hero h1 { margin: 0 0 4px; }
@@ -988,3 +992,4 @@ body.kids .logo-mark { background: linear-gradient(135deg, #ffcf5c, #ff7ab6); }
 .th-scroll::-webkit-scrollbar { height: 8px; }
 .th-scroll::-webkit-scrollbar-thumb { background: #4a4850; border-radius: 4px; }
 .th-scroll::-webkit-scrollbar-track { background: transparent; }
+.hc-photo { background-position: center, var(--pos, center); }
