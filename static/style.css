@@ -914,11 +914,15 @@ body.kids .logo-mark { background: linear-gradient(135deg, #ffcf5c, #ff7ab6); }
 .hero-mall { background: linear-gradient(90deg, rgba(11,10,12,.92) 0%, rgba(11,10,12,.65) 55%, rgba(11,10,12,.35) 100%), var(--img) var(--pos, center) / cover no-repeat; }
 .hero-mall .hero-art { opacity: .25; }
 .hero-mall-name { color: var(--green); }
+.hero-kicker { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--green); margin-bottom: 4px; }
 .hc-credit { position: absolute; right: 12px; bottom: 8px; font-size: 9px; color: rgba(255,255,255,.55); }
 .hc-cinema { --img: radial-gradient(90% 70% at 70% 20%, #3a3542 0%, #16151a 70%); }
 .hc-soon { background: repeating-linear-gradient(45deg, #17161a 0 12px, #1c1b20 12px 24px); opacity: .8; }
 .st-hero { padding: 18px 22px; border-radius: 20px; margin-bottom: 18px; background: linear-gradient(120deg, #2f8a3c 0%, #1f2a1a 55%, #c99a1e 140%); }
 .st-hero h1 { margin: 0 0 4px; }
+.st-hero-photo { min-height: 170px; display: flex; align-items: flex-end; background: linear-gradient(90deg, rgba(11,10,12,.9) 0%, rgba(11,10,12,.55) 60%, rgba(11,10,12,.2) 100%), var(--img) center / cover no-repeat; }
+.st-hero-photo p { margin: 2px 0; color: #e9e6ec; }
+.st-map .st-stand { font-size: 10px; fill: var(--dim); font-weight: 700; letter-spacing: .1em; }
 .st-matches { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin-top: 10px; }
 .st-match { background: var(--card); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
 .st-match:hover { background: var(--card-2); }
@@ -1001,3 +1005,5 @@ body.kids .logo-mark { background: linear-gradient(135deg, #ffcf5c, #ff7ab6); }
 .t-ico { font-size: 34px; line-height: 1; flex: none; width: 48px; text-align: center; }
 .t-qr.small { margin-top: 12px; padding-top: 12px; }
 .t-qr.small img, .t-qr.small canvas { background: #fff; padding: 6px; border-radius: 8px; }
+.st-oval text { font-size: 7.5px; }
+.st-oval .st-stand { font-size: 9px; }

@@ -215,13 +215,13 @@ def my_bonus():
 
 
 # ---------- Подарочные сертификаты ----------
-CODE_RE = re.compile(r"^KADR-[A-Z0-9]{4}-[A-Z0-9]{4}$")
+CODE_RE = re.compile(r"^(?:KADR|3DTK)-[A-Z0-9]{4}-[A-Z0-9]{4}$")  # KADR- — старые сертификаты
 _ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 
 def new_gift_code() -> str:
     part = lambda: "".join(secrets.choice(_ALPHABET) for _ in range(4))  # noqa: E731
-    return f"KADR-{part()}-{part()}"
+    return f"3DTK-{part()}-{part()}"
 
 
 def gift_row(conn, code: str):

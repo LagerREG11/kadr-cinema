@@ -1,6 +1,6 @@
 {
-  "name": "KADR Cinema",
-  "short_name": "KADR",
+  "name": "3D Ticket",
+  "short_name": "3D Ticket",
   "description": "Кино афишасы, орын таңдау және онлайн билет (оқу жобасы)",
   "start_url": "/",
   "display": "standalone",

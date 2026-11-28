@@ -1,4 +1,4 @@
-"""KADR Cinema — учебный сайт кинотеатра (Flask + SQLite).
+"""3D Ticket — учебный сайт билетов (кино, стадион, театр) (Flask + SQLite).
 
 Афиша и расписание, выбор мест, регистрация/вход, демо-оплата и билеты.
 Оплата ДЕМОНСТРАЦИОННАЯ: карта проверяется только по формату, деньги не списываются,
@@ -617,5 +617,5 @@ init_db()
 if __name__ == "__main__":
     host = "0.0.0.0" if "--lan" in sys.argv else "127.0.0.1"
     port = int(os.environ.get("PORT", 5173))
-    print(f"KADR Cinema: http://127.0.0.1:{port}")
+    print(f"3D Ticket: http://127.0.0.1:{port}")
     app.run(host=host, port=port, debug=False)

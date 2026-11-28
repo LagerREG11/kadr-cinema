@@ -10,7 +10,7 @@ import random
 from datetime import date, datetime, time, timedelta
 
 CINEMA = {
-    "name": "KADR Cinema",
+    "name": "3D Ticket",
     "city": {"kk": "Қызылорда", "ru": "Кызылорда"},
     "address": {"kk": "Проект №1", "ru": "Проект №1"},
     "phone": "+7 700 000 00 00",
@@ -26,7 +26,7 @@ DAYS_AHEAD = 14
 PRESALE_HORIZON = 60   # фильмы с премьерой в ближайшие N дней продаются заранее
 PRESALE_DAYS = 3       # сколько дней с премьеры открыто в предпродаже
 
-# Города Казахстана (в каждом — кинотеатр KADR Cinema со своим расписанием)
+# Города Казахстана (в каждом — кинотеатр со своим расписанием)
 CITIES = [
     {"id": "kzo", "name": {"kk": "Қызылорда", "ru": "Кызылорда"}},
     {"id": "ala", "name": {"kk": "Алматы", "ru": "Алматы"}},

@@ -33,15 +33,16 @@
   }
 
   // высота и азимут солнца над Кызылордой (44.85° с.ш., 65.51° в.д., UTC+5) в момент матча
-  function sunAt(dateStr, timeStr) {
+  function sunAt(dateStr, timeStr, geo) {
+    const g0 = geo || { lat: 44.85, lon: 65.51 }; // по умолчанию — Кызылорда
     const d = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
     const [hh, mm] = (timeStr || '18:00').split(':').map(Number);
     const N = Math.round((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
-    const rad = Math.PI / 180, lat = 44.85 * rad;
+    const rad = Math.PI / 180, lat = g0.lat * rad;
     const decl = 23.44 * rad * Math.sin(2 * Math.PI * (284 + N) / 365);
     const B = 2 * Math.PI * (N - 81) / 364;
     const eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
-    const solar = hh + mm / 60 + (4 * (65.51 - 75) + eot) / 60;
+    const solar = hh + mm / 60 + (4 * (g0.lon - 75) + eot) / 60;
     const H = 15 * (solar - 12) * rad;
     const el = Math.asin(Math.sin(lat) * Math.sin(decl) + Math.cos(lat) * Math.cos(decl) * Math.cos(H));
     const az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(lat) - Math.tan(decl) * Math.cos(lat));
@@ -98,9 +99,9 @@
     return m;
   }
 
-  function build(sectors, takenBySector, match) {
-    const scene = new THREE.Scene();
-    const sun = sunAt(match && match.date, match && match.time);
+  // небо, солнце/луна и свет по дате и времени матча (общее для всех стадионов)
+  function addSky(scene, match, geo) {
+    const sun = sunAt(match && match.date, match && match.time, geo);
     const el = sun.el, day = clamp((el + 2) / 14, 0, 1), night = clamp((-el - 3) / 9, 0, 1);
     const sc = skyColors(el);
     scene.background = sc.hor.clone();
@@ -146,6 +147,13 @@
       const sl = new THREE.DirectionalLight(mixHex('#ffb070', '#fff6e8', el / 25), lerp(0.2, 1.1, day));
       sl.position.copy(sunDir).multiplyScalar(300); scene.add(sl);
     }
+    if (night > 0) { const ml = new THREE.DirectionalLight(0x9fb4ff, 0.2 * night); ml.position.set(-420, 330, -520); scene.add(ml); }
+    return { el, night };
+  }
+
+  function build(sectors, takenBySector, match) {
+    const scene = new THREE.Scene();
+    const { el } = addSky(scene, match);
     // прожекторы стадиона: на полную в сумерках и ночью
     const flood = lerp(0.25, 0.85, clamp(1 - el / 6, 0, 1));
     [[-60, -45], [60, -45], [-60, 45], [60, 45]].forEach(([x, z]) => {
@@ -153,7 +161,6 @@
       sp.position.set(x * 1.15, 26, z * 1.25); sp.target.position.set(x * 0.25, 0, z * 0.2);
       scene.add(sp, sp.target);
     });
-    if (night > 0) { const ml = new THREE.DirectionalLight(0x9fb4ff, 0.2 * night); ml.position.set(-420, 330, -520); scene.add(ml); }
 
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshStandardMaterial({ color: 0x3a3630, roughness: 1 }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = -0.05; scene.add(ground);
@@ -413,5 +420,5 @@
     ctx.renderer.dispose(); ctx.renderer.forceContextLoss();
     ctx = null;
   }
-  window.Stadium3D = { available: () => typeof window.THREE !== 'undefined', open, close, info, seatPos };
+  window.Stadium3D = { available: () => typeof window.THREE !== 'undefined', open, close, info, seatPos, addSky, canvasTex };
 })();

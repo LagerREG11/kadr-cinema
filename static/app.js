@@ -1,4 +1,4 @@
-/* KADR Cinema — одностраничное приложение: афиша → сеанс → места → оплата → билет. */
+/* 3D Ticket — одностраничное приложение: афиша → сеанс → места → оплата → билет. */
 (() => {
   'use strict';
 
@@ -290,7 +290,7 @@
       const msg = t('notif_' + it.stage, { m: L(m.title) });
       showBanner(msg, m);
       if ('Notification' in window && Notification.permission === 'granted') {
-        try { new Notification('KADR Cinema', { body: msg, icon: '/icon.svg', tag: `rem-${m.id}-${it.stage}` }); } catch { /* мобильные браузеры */ }
+        try { new Notification('3D Ticket', { body: msg, icon: '/icon.svg', tag: `rem-${m.id}-${it.stage}` }); } catch { /* мобильные браузеры */ }
       }
     });
     api('/notifications/seen', { method: 'POST', body: { items } }).catch(() => {});
@@ -333,7 +333,7 @@
     // название города в логотипе; разделы, которые есть только в одном городе, скрываются в других
     const curCity = S.city || (S.cat && S.cat.default_city) || 'kzo';
     const lc = $('#logoCity'); if (lc && S.cat) lc.textContent = cityName(curCity);
-    $$('[data-local]').forEach((a) => { a.hidden = a.dataset.local !== curCity; });
+    $$('[data-local]').forEach((a) => { a.hidden = !a.dataset.local.split(' ').includes(curCity); });
     document.body.classList.toggle('kids', !!S.kids);
     const an = $('#adminNav');
     if (an) an.hidden = !(S.user && S.user.is_admin);
@@ -388,7 +388,8 @@
       <section class="hero${mall ? ' hero-mall' : ''}"${mall ? ` style="--img:url('${mall.img}'); --pos:${mall.pos || 'center'}"` : ''}>
         <div class="hero-art" aria-hidden="true"><div class="hero-screen"></div>${[...Array(5)].map(() => '<i></i>').join('')}</div>
         <div class="hero-in">
-          <h1>${esc(c.name)}${mall ? ` <span class="hero-mall-name">· ${esc(mall.name)}</span>` : ''}</h1>
+          <span class="hero-kicker">${t('cinema_word')}</span>
+          <h1>${esc(mall ? mall.name : cityName(S.city))}</h1>
           <p class="muted"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>${esc(place)}</p>
           <div class="chips">${Object.values(S.cat.halls).map((hl) => `<span class="chip">${esc(hl.name)} · ${esc(hl.format)}</span>`).join('')}</div>
         </div>
@@ -585,7 +586,7 @@
         <div class="sp-info">
           <h2>${esc(L(movie.title))}</h2>
           <p class="sp-meta">${dateShort} • ${show.time}–${endTime(show)} • ${show.format} <span class="badge">${langLabel(show.lang)}</span> <span class="badge badge-age">${movie.age}+</span></p>
-          <p class="sp-place">${esc(S.cat.cinema.name)} ${esc(cityName(show.city))} • ${esc(S.cat.halls[show.hall].name)}</p>
+          <p class="sp-place">${esc(window.currentMall && window.currentMall() ? window.currentMall().name : cityName(show.city))} • ${esc(S.cat.halls[show.hall].name)}</p>
         </div>
       </div>
       ${show.past ? `<p class="warn">${t('show_started')}</p>` : ''}
@@ -889,7 +890,7 @@
           <p class="note" id="stuNote" hidden>${t('student_note')}</p>
           <div class="co-extras">
             <label class="co-opt" ${bonus.balance > 0 ? '' : 'hidden'}><input type="checkbox" id="useBonus"> <span>${t('use_bonus', { n: bonus.balance })}</span></label>
-            <div class="gift-apply"><input id="giftCode" placeholder="KADR-XXXX-XXXX" maxlength="14" autocapitalize="characters" aria-label="${t('gift_code')}"><button type="button" class="btn btn-ghost-b btn-sm" id="giftBtn">${t('apply')}</button></div>
+            <div class="gift-apply"><input id="giftCode" placeholder="3DTK-XXXX-XXXX" maxlength="14" autocapitalize="characters" aria-label="${t('gift_code')}"><button type="button" class="btn btn-ghost-b btn-sm" id="giftBtn">${t('apply')}</button></div>
             <p class="small muted" id="giftInfo"></p>
           </div>
           <div class="co-lines" id="coLines"></div>
@@ -1059,7 +1060,7 @@
       ${q.get('new') ? `<div class="success"><span class="check">✓</span><h1>${t('paid_ok')}</h1></div>` : `<a class="back" href="#/tickets">‹ ${t('my_tickets')}</a><h1>${t('your_ticket')}</h1>`}
       ${ticketHtml(b, true)}
       <div class="actions"><a class="btn btn-ghost-b" href="#/tickets">${t('my_tickets')}</a><a class="btn btn-white" href="#/cinema">${t('to_afisha')}</a></div>`;
-    if (window.QRCode) new QRCode($('#qr'), { text: `KADR:${b.code}:${b.show.id}`, width: 168, height: 168, colorDark: '#0b0a0c', colorLight: '#ffffff' });
+    if (window.QRCode) new QRCode($('#qr'), { text: `3DT:${b.code}:${b.show.id}`, width: 168, height: 168, colorDark: '#0b0a0c', colorLight: '#ffffff' });
   }
 
   // билет стадиона / театра в «Мои билеты»: заголовок, дата, места, код, QR
@@ -1070,8 +1071,9 @@
     let ico, title, line, seats;
     if (kind === 'stadium') {
       ico = '🏟️';
-      title = x.match ? `${esc(x.match.home)} — ${esc(x.match.away)}` : 'Қайсар Арена';
-      line = `${fmtDay(x.match ? x.match.date : idDate(x.match_id))}${x.match ? ' · ' + x.match.time : ''} · Қайсар Арена`;
+      const stName = x.stadium ? L(x.stadium) : 'Қайсар Арена';
+      title = x.match ? `${esc(x.match.home)} — ${esc(x.match.away)}` : esc(stName);
+      line = `${fmtDay(x.match ? x.match.date : idDate(x.match_id))}${x.match ? ' · ' + x.match.time : ''} · ${esc(stName)}`;
       seats = x.seats.map((p) => `<li><span>${ST('sector')} ${esc(x.sector)} · ${ST('row')} ${p.split('-')[0]}, ${ST('seat')} ${p.split('-')[1]}</span></li>`).join('');
     } else {
       ico = '🎭';
@@ -1125,7 +1127,7 @@
     const keep = q.get('next') ? `?next=${encodeURIComponent(q.get('next'))}` : '';
     page.innerHTML = `
       <form class="card auth-card" novalidate>
-        <span class="logo-mark big">K</span>
+        <span class="logo-mark big">3D</span>
         <h1>${t(reg ? 'register_title' : 'login_title')}</h1>
         ${reg ? `<label class="field"><span>${t('name')}</span><input name="name" autocomplete="name" required maxlength="60"></label>` : ''}
         <label class="field"><span>${t('email')}</span><input name="email" type="email" autocomplete="email" required></label>
@@ -1268,7 +1270,7 @@
   // ---------- Подарочные сертификаты ----------
   function giftCardHtml(g) {
     return `<div class="giftcard">
-      <div class="gc-top"><span class="logo-mark">K</span><span>KADR Cinema</span></div>
+      <div class="gc-top"><span class="logo-mark">3D</span><span>3D Ticket</span></div>
       <p class="gc-hi">${g.to ? esc(t('gift_for', { n: g.to })) : t('gift_title')}</p>
       <b class="gc-amt">${money(g.amount)}</b>
       ${g.message ? `<p class="gc-msg">«${esc(g.message)}»</p>` : ''}
@@ -1346,7 +1348,7 @@
     $('#shareGift').addEventListener('click', async () => {
       const text = `${t('gift_share_text')} ${link}`;
       try {
-        if (navigator.share) await navigator.share({ title: 'KADR Cinema', text, url: link });
+        if (navigator.share) await navigator.share({ title: '3D Ticket', text, url: link });
         else { await navigator.clipboard.writeText(link); toast(t('copied')); }
       } catch { /* пользователь отменил */ }
     });
@@ -1364,7 +1366,7 @@
     [/^\/stadium$/, (p) => window.StadiumPage(p)],
     [/^\/theatre$/, (p) => window.TheatrePage(p)],
     [/^\/theatre\/(t\d{8}-\d{4})$/, (p, sid) => window.TheatreShowPage(p, sid)],
-    [/^\/stadium\/(m\d{8})$/, (p, mid) => window.StadiumMatchPage(p, mid)],
+    [/^\/stadium\/([mc]\d{8})$/, (p, mid) => window.StadiumMatchPage(p, mid)],
     [/^\/movie\/(\d+)$/, pageMovie],
     [/^\/session\/([\w-]+)$/, pageSession],
     [/^\/checkout$/, pageCheckout],
@@ -1374,7 +1376,7 @@
     [/^\/register$/, (p, q) => (S.user ? (location.hash = nextHash(q)) : authForm(p, q, 'register'))],
     [/^\/profile$/, pageProfile],
     [/^\/gift$/, pageGift],
-    [/^\/gift\/(KADR-[A-Za-z0-9]{4}-[A-Za-z0-9]{4})$/, pageGiftView],
+    [/^\/gift\/((?:KADR|3DTK)-[A-Za-z0-9]{4}-[A-Za-z0-9]{4})$/, pageGiftView],
     [/^\/admin$/, (p, q) => {
       if (!S.user) { location.hash = '#/login?next=admin'; return; }
       if (!S.user.is_admin || !window.AdminPage) return notFound(p, t('err_forbidden'));

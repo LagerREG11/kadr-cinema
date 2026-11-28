@@ -1,7 +1,9 @@
-"""«Қайсар Арена» (Кызылорда, левый берег): схема секторов, матчи, места, покупка билетов (демо-оплата).
+"""Стадионы: схема секторов, матчи, места, покупка билетов (демо-оплата).
 
-Факты: ~11 000 мест, поле 105×68 м, открыта в 2025 г., IV категория УЕФА.
-Официальная схема секторов не опубликована — здесь приближённая схема: 4 трибуны, 20 секторов (~11 000 мест).
+«Қайсар Арена» (Кызылорда): ~11 000 мест, открыта в 2025 г. Официальная схема не опубликована —
+приближённая схема: 4 трибуны, 20 секторов.
+Центральный стадион (Алматы): ~23 800 мест, 1958 г., легкоатлетические дорожки вокруг поля.
+Схема по официальной карте: 60 секторов, на Западной и Восточной трибунах — два яруса, ложи на Западной.
 Матчи — демонстрационное расписание.
 """
 from __future__ import annotations
@@ -17,8 +19,10 @@ bp = Blueprint("stadium", __name__, url_prefix="/api/stadium")
 _d = SimpleNamespace()
 
 STADIUM = {
-    "name": "Қайсар Арена",
+    "id": "kaisar", "shape": "rect", "city_id": "kzo", "prefix": "m", "home": "Қайсар",
+    "name": {"kk": "Қайсар Арена", "ru": "Қайсар Арена"},
     "city": {"kk": "Қызылорда, сол жағалау", "ru": "Кызылорда, левый берег"},
+    "facts": {"kk": "11 000 орын · алаң 105×68 м · УЕФА IV санаты", "ru": "11 000 мест · поле 105×68 м · УЕФА IV категория"},
     "capacity": 11000,
     "pitch": [105, 68],
     "opened": 2025,
@@ -42,7 +46,44 @@ _add("S", 4, 24, ["end", "end", "end", "away"])
 SECTORS_BY_ID = {s["id"]: s for s in SECTORS}
 TOTAL_SEATS = sum(s["rows"] * s["seats"] for s in SECTORS)  # 11 040
 
-TEAMS = ["Қайрат", "Астана", "Тобыл", "Ордабасы", "Ақтөбе", "Елімай", "Жетісу", "Атырау"]
+# ---------- Центральный стадион, Алматы ----------
+# угол a — по эллипсу вокруг поля: 0° — север (ворота 6), 90° — восток, 180° — юг, 270° (−90°) — запад
+CENTRAL = {
+    "id": "central", "shape": "oval", "city_id": "ala", "prefix": "c", "home": "Қайрат",
+    "name": {"kk": "Орталық стадион", "ru": "Центральный стадион"},
+    "city": {"kk": "Алматы, Сәтбаев көшесі, 29/3", "ru": "Алматы, ул. Сатпаева, 29/3"},
+    "facts": {"kk": "~23 800 орын · 1958 жылдан · жеңіл атлетика жолдары", "ru": "~23 800 мест · с 1958 года · легкоатлетические дорожки"},
+    "capacity": 23804,
+    "pitch": [105, 68],
+    "opened": 1958,
+}
+_CPRICES = {"vip": 12000, "lodge": 8000, "west": 4000, "center": 4000, "east": 3000, "end": 2000}
+C_SECTORS = []
+
+
+def _arc(ids, stand, tier, a0, a1, rows, seats, kind_of):
+    step = (a1 - a0) / len(ids)
+    for i, n in enumerate(ids):
+        kind = kind_of(n)
+        C_SECTORS.append({"id": str(n), "stand": stand, "tier": tier, "a0": round(a0 + i * step, 2), "a1": round(a0 + (i + 1) * step, 2),
+                          "rows": rows, "seats": seats, "kind": kind, "price": _CPRICES[kind]})
+
+
+_arc(range(1, 10), "W", 0, -125, -55, 22, 16, lambda n: "west")
+_arc(range(10, 18), "W", 1, -120, -60, 14, 18, lambda n: "vip" if n in (13, 14) else "lodge" if n in (12, 15) else "west")
+_arc(range(18, 29), "N", 0, -50, 50, 22, 24, lambda n: "end")
+_arc(range(29, 38), "E", 0, 55, 125, 22, 16, lambda n: "center" if n in (33, 34, 35) else "east")
+_arc(range(38, 49), "E", 1, 52, 128, 14, 20, lambda n: "center" if n in (43, 44, 45) else "east")
+_arc(range(49, 61), "S", 0, 130, 230, 22, 24, lambda n: "end")
+C_SECTORS_BY_ID = {s["id"]: s for s in C_SECTORS}
+C_TOTAL = sum(s["rows"] * s["seats"] for s in C_SECTORS)  # 23 576
+
+STADIUMS = {
+    "kaisar": {"info": STADIUM, "sectors": SECTORS, "by_id": SECTORS_BY_ID, "total": TOTAL_SEATS},
+    "central": {"info": CENTRAL, "sectors": C_SECTORS, "by_id": C_SECTORS_BY_ID, "total": C_TOTAL},
+}
+
+TEAMS = ["Қайрат", "Астана", "Тобыл", "Ордабасы", "Ақтөбе", "Елімай", "Жетісу", "Атырау", "Қайсар"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS stadium_tickets (
@@ -68,32 +109,47 @@ def init(conn):
     conn.executescript(SCHEMA)
 
 
-def matches(today: date) -> list[dict]:
-    """Демо-расписание: домашние матчи «Қайсара» по выходным."""
+def matches(today: date, sid: str = "kaisar") -> list[dict]:
+    """Демо-расписание: домашние матчи хозяев стадиона по выходным."""
+    st = STADIUMS[sid]["info"]
+    teams = [t for t in TEAMS if t != st["home"]]
     out = []
     d = today + timedelta(days=(5 - today.weekday()) % 7 or 7)  # ближайшая суббота
+    shift = 1 if sid == "central" else 0  # «Қайрат» — по воскресеньям
     for k in range(6):
-        day = d + timedelta(days=7 * k + (1 if k % 3 == 2 else 0))
+        day = d + timedelta(days=7 * k + ((1 if k % 3 == 2 else 0) if not shift else (0 if k % 3 == 2 else 1)))
         hh = (18, 15, 13, 20, 16, 19)[k]  # днём, на закате и вечером
         out.append({
-            "id": f"m{day:%Y%m%d}",
+            "id": f"{st['prefix']}{day:%Y%m%d}", "stadium": sid,
             "date": day.isoformat(),
             "time": f"{hh:02d}:00",
             "starts_at": datetime.combine(day, time(hh, 0)).isoformat(timespec="minutes"),
-            "home": "Қайсар",
-            "away": TEAMS[(today.toordinal() // 7 + k) % len(TEAMS)],
+            "home": st["home"],
+            "away": teams[(today.toordinal() // 7 + k) % len(teams)],
             "tournament": {"kk": "Премьер-лига (демо)", "ru": "Премьер-лига (демо)"},
         })
     return out
 
 
 def find_match(mid: str):
-    return next((m for m in matches(_d.now().date()) if m["id"] == mid), None)
+    for sid, st in STADIUMS.items():
+        if mid[:1] == st["info"]["prefix"]:
+            return next((m for m in matches(_d.now().date(), sid) if m["id"] == mid), None)
+    return None
+
+
+def _sectors_of(m):
+    return STADIUMS[m["stadium"]]["by_id"]
 
 
 @bp.get("")
 def info():
-    return jsonify(stadium=STADIUM, sectors=SECTORS, total=TOTAL_SEATS, matches=matches(_d.now().date()))
+    from flask import request
+    q = request.args
+    sid = q.get("id") or next((k for k, v in STADIUMS.items() if v["info"]["city_id"] == q.get("city")), "kaisar")
+    st = STADIUMS.get(sid, STADIUMS["kaisar"])
+    sid = st["info"]["id"]
+    return jsonify(stadium=st["info"], sectors=st["sectors"], total=st["total"], matches=matches(_d.now().date(), sid))
 
 
 @bp.get("/matches/<mid>")
@@ -108,10 +164,11 @@ def match_view(mid):
 
 @bp.get("/matches/<mid>/sectors/<sid>")
 def sector_view(mid, sid):
-    if not find_match(mid) or sid not in SECTORS_BY_ID:
+    m = find_match(mid)
+    if not m or sid not in _sectors_of(m):
         return _d.err("not_found", 404)
     taken = [r[0] for r in _d.db().execute("SELECT seat FROM stadium_tickets WHERE match_id = ? AND sector = ?", (mid, sid))]
-    return jsonify(sector=SECTORS_BY_ID[sid], taken=taken)
+    return jsonify(sector=_sectors_of(m)[sid], taken=taken)
 
 
 SEAT_RE = re.compile(r"^(\d{1,2})-(\d{1,2})$")
@@ -124,7 +181,7 @@ def book():
         return _d.err("auth_required", 401)
     d = _d.body()
     m = find_match(str(d.get("match_id", "")))
-    sec = SECTORS_BY_ID.get(str(d.get("sector", "")))
+    sec = _sectors_of(m).get(str(d.get("sector", ""))) if m else None
     if not m or not sec:
         return _d.err("not_found", 404)
     if datetime.fromisoformat(m["starts_at"]) <= _d.now():
@@ -140,7 +197,7 @@ def book():
     card_error, _brand, last4 = _d.check_card(d.get("card") or {})
     if card_error:
         return _d.err(card_error, 402 if card_error == "card_declined" else 400)
-    code = "S" + secrets.token_hex(3).upper()
+    code = ("S" if m["stadium"] == "kaisar" else "C") + secrets.token_hex(3).upper()
     ts = _d.now().isoformat(timespec="seconds")
     conn = _d.db()
     try:
@@ -167,4 +224,6 @@ def my_tickets():
         g["total"] += r["price"]
     for g in groups.values():
         g["match"] = find_match(g["match_id"])
+        sid = next((k for k, v in STADIUMS.items() if v["info"]["prefix"] == g["match_id"][:1]), "kaisar")
+        g["stadium"] = STADIUMS[sid]["info"]["name"]
     return jsonify(tickets=list(groups.values()))

@@ -5,30 +5,39 @@
   const TX = {
     kk: {
       hub_title: '3D Ticket · {c}', hub_sub: '{c}: орындарды 3D-де көріп, билетті онлайн алыңыз.', soon_city: '{c} қаласының 3D нысандары (стадион, театр т.б.) жақында қосылады',
-      cinema: 'KADR Cinema', cinema_d: 'Кинотеатр: афиша, орынды таңдау, 3D залдан көрініс', stadium: 'Қайсар Арена', stadium_d: 'Стадион: матчтар, секторлар, 3D трибунадан көрініс',
+      cinema: 'Кинотеатр', cinema_d: 'Афиша, орынды таңдау, 3D залдан көрініс', stadium: 'Қайсар Арена', stadium_d: 'Стадион: матчтар, секторлар, 3D трибунадан көрініс',
       soon: 'Жақында', soon_d: 'Жаңа 3D нысандар қосылады', open: 'Ашу',
       st_facts: '11 000 орын · алаң 105×68 м · УЕФА IV санаты', matches: 'Матчтар', demo: 'Демо-кесте: нақты матчтар емес',
       from: '{p} бастап', choose_sector: 'Секторды таңдаңыз', sector: 'Сектор', row: 'Қатар', seat: 'Орын', free: 'бос',
       v3d: '3D көрініс', buy: 'Сатып алу · {p}', pick_seats: 'Орын таңдаңыз (6-ға дейін)', approx: 'Схема шамамен: ресми секторлар жарияланбаған.',
       pay_title: 'Төлем', done: 'Билет дайын!', to_pitch: 'алаң ортасына дейін', height: 'биіктігі', angle: 'көру бұрышы', back: 'Артқа',
-      vip: 'VIP', center: 'Орталық', side: 'Бүйір', east: 'Шығыс', end: 'Қақпа артында', away: 'Қонақтар', my: 'Стадион билеттері',
+      vip: 'VIP', center: 'Орталық', side: 'Бүйір', east: 'Шығыс', end: 'Қақпа артында', away: 'Қонақтар', my: 'Стадион билеттері', lodge: 'Ложа', west: 'Батыс', upper: 'жоғарғы ярус', lower: 'төменгі ярус', central_d: 'Стадион: «Қайрат» матчтары, 60 сектор, 3D трибунадан көрініс', oval_note: 'Секторлар стадионның ресми картасы бойынша; орын саны шамамен.',
       W: 'Батыс трибуна', E: 'Шығыс трибуна', N: 'Солтүстік трибуна', S: 'Оңтүстік трибуна',
     },
     ru: {
       hub_title: '3D Ticket · {c}', hub_sub: '{c}: смотрите места в 3D и покупайте билеты онлайн.', soon_city: '3D-объекты города {c} (стадион, театр и др.) появятся скоро',
-      cinema: 'KADR Cinema', cinema_d: 'Кинотеатр: афиша, выбор места, вид из зала в 3D', stadium: 'Қайсар Арена', stadium_d: 'Стадион: матчи, секторы, вид с трибуны в 3D',
+      cinema: 'Кинотеатр', cinema_d: 'Афиша, выбор места, вид из зала в 3D', stadium: 'Қайсар Арена', stadium_d: 'Стадион: матчи, секторы, вид с трибуны в 3D',
       soon: 'Скоро', soon_d: 'Добавим новые 3D-объекты', open: 'Открыть',
       st_facts: '11 000 мест · поле 105×68 м · УЕФА IV категория', matches: 'Матчи', demo: 'Демо-расписание: не реальные матчи',
       from: 'от {p}', choose_sector: 'Выберите сектор', sector: 'Сектор', row: 'Ряд', seat: 'Место', free: 'свободно',
       v3d: 'Вид в 3D', buy: 'Купить · {p}', pick_seats: 'Выберите места (до 6)', approx: 'Схема приблизительная: официальные секторы не опубликованы.',
       pay_title: 'Оплата', done: 'Билет готов!', to_pitch: 'до центра поля', height: 'высота', angle: 'угол обзора', back: 'Назад',
-      vip: 'VIP', center: 'Центр', side: 'Боковой', east: 'Восток', end: 'За воротами', away: 'Гостевой', my: 'Билеты на стадион',
+      vip: 'VIP', center: 'Центр', side: 'Боковой', east: 'Восток', end: 'За воротами', away: 'Гостевой', my: 'Билеты на стадион', lodge: 'Ложа', west: 'Запад', upper: 'верхний ярус', lower: 'нижний ярус', central_d: 'Стадион: матчи «Кайрата», 60 секторов, вид с трибуны в 3D', oval_note: 'Секторы — по официальной карте стадиона; число мест приблизительное.',
       W: 'Западная трибуна', E: 'Восточная трибуна', N: 'Северная трибуна', S: 'Южная трибуна',
     },
   };
   const s = (k, v = {}) => ((TX[K().S.lang] || TX.ru)[k] || TX.ru[k] || k).replace(/\{(\w+)\}/g, (_, x) => v[x] ?? '');
   let data = null;
-  const load = async () => (data = data || await K().api('/stadium'));
+  const cache = {};
+  const curCity = () => { const S = K().S; return S.city || (S.cat && S.cat.default_city) || 'kzo'; };
+  const load = async (q) => {
+    const key = q || `city=${curCity()}`;
+    return (cache[key] = cache[key] || await K().api(`/stadium?${key}`));
+  };
+  const STADIUM_BY_PREFIX = { m: 'kaisar', c: 'central' };
+  // фото стадиона для карточки и шапки
+  const STADIUM_IMG = { kaisar: '/img/venue-stadium.jpg', central: '/img/venue-central.jpg' };
+  const module3d = (d) => (d.stadium.shape === 'oval' ? window.Oval3D : window.Stadium3D);
 
   // ТРЦ с кинотеатром по городам; фото — собственное пользователя или свободные с Wikimedia Commons
   const MALLS = {
@@ -69,6 +78,9 @@
           <span class="hc-tag">${s('cinema')}</span><b>${K().esc(m.name)}</b>
           <small class="hc-addr"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>${K().esc(K().L(m.addr))}</small>
           <small>${s('cinema_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span>${m.credit ? `<span class="hc-credit">${K().esc(m.credit)}</span>` : ''}</a>`).join('')}
+        ${city === 'ala' ? `<a class="hub-card hc-photo" href="#/stadium" style="--img:url('/img/venue-central.jpg'); --pos: center 40%"><b>${K().S.lang === 'kk' ? 'Орталық стадион' : 'Центральный стадион'}</b>
+          <small class="hc-addr"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>${K().S.lang === 'kk' ? 'Алматы, Сәтбаев көшесі, 29/3' : 'Алматы, ул. Сатпаева, 29/3'}</small>
+          <small>${s('central_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>` : ''}
         ${local ? `<a class="hub-card hc-photo" href="#/stadium" style="--img:url('/img/venue-stadium.jpg')"><b>${s('stadium')}</b><small>${s('stadium_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
         <a class="hub-card hc-photo" href="#/theatre" style="--img:url('/img/venue-theatre.jpg'); --pos: center 78%"><b>${window.TheatreTX ? window.TheatreTX('hub') : 'Театр'}</b><small>${window.TheatreTX ? window.TheatreTX('hub_d') : ''}</small><span class="btn btn-green btn-sm">${s('open')}</span><span class="hc-credit">Фото: SAKRI, CC BY-SA 4.0</span></a>
 ` : ''}
@@ -85,7 +97,7 @@
     const minP = Math.min(...d.sectors.map((x) => x.price));
     page.innerHTML = `
       <a class="back" href="#/">‹ 3D Ticket</a>
-      <section class="st-hero"><div><h1>🏟️ ${esc(d.stadium.name)}</h1><p class="muted">${esc(L(d.stadium.city))} · ${s('st_facts')}</p></div></section>
+      <section class="st-hero st-hero-photo" style="--img:url('${STADIUM_IMG[d.stadium.id]}')"><div><h1>🏟️ ${esc(L(d.stadium.name))}</h1><p>${esc(L(d.stadium.city))}</p><p class="small">${esc(L(d.stadium.facts))}</p></div></section>
       <h3>${s('matches')}</h3><p class="small muted">${s('demo')}</p>
       <div class="st-matches">${d.matches.map((m) => `<a class="st-match" href="#/stadium/${m.id}">
         <small>${fmtDay(m.date)} · ${m.time}</small><b>${esc(m.home)} — ${esc(m.away)}</b><span class="muted small">${esc(L(m.tournament))}</span>
@@ -93,7 +105,7 @@
   };
 
   // ---------- Стадион: секторы, места, 3D, покупка ----------
-  const SECT_COL = { vip: '#3b5bdb', center: '#5fd38d', side: '#4fb37a', east: '#38a169', end: '#2f855a', away: '#8a94a6' };
+  const SECT_COL = { vip: '#3b5bdb', center: '#5fd38d', side: '#4fb37a', east: '#38a169', end: '#2f855a', away: '#8a94a6', lodge: '#d9741c', west: '#c9a227' };
   function sectorMap(d, sold, sel) {
     // вид сверху: поле в центре, секторы по периметру
     const W = 360, H = 260, cx = W / 2, cy = H / 2, pw = 150, ph = 98;
@@ -116,10 +128,41 @@
       <circle cx="${cx}" cy="${cy}" r="12" fill="none" stroke="#e8f5e9" stroke-width="1.2"/>${out.join('')}</svg>`;
   }
 
+  function ovalMap(d, sold, sel) {
+    const W = 380, H = 300, cx = W / 2, cy = H / 2, k = 1.05, Lh = 42.2 * k;
+    // контур «стадиона» в пикселях: угол a (0° — север/вправо, 90° — восток/вниз)
+    const pt = (a, R) => {
+      const dx = Math.cos(a * Math.PI / 180), dz = Math.sin(a * Math.PI / 180);
+      let lo = 0, hi = R + Lh + 5;
+      for (let i = 0; i < 24; i++) { const t = (lo + hi) / 2, x = dx * t, z = dz * t, ex = Math.max(Math.abs(x) - Lh, 0); if (ex * ex + z * z <= R * R) lo = t; else hi = t; }
+      return [cx + dx * lo, cy + dz * lo];
+    };
+    const band = (sec) => (sec.tier ? [96, 122] : [66, 92]);
+    const out = d.sectors.map((sec) => {
+      const [r0, r1] = band(sec), N = 6, pts = [];
+      for (let i = 0; i <= N; i++) pts.push(pt(sec.a0 + ((sec.a1 - sec.a0) * i) / N + 0.4, r0));
+      for (let i = N; i >= 0; i--) pts.push(pt(sec.a0 + ((sec.a1 - sec.a0) * i) / N - 0.4 * (i === 0 ? -1 : 1), r1));
+      const mid = pt((sec.a0 + sec.a1) / 2, (r0 + r1) / 2);
+      const free = sec.rows * sec.seats - (sold[sec.id] || 0);
+      return `<g class="sec${sel === sec.id ? ' on' : ''}" data-sec="${sec.id}" role="button" tabindex="0" aria-label="${s('sector')} ${sec.id}">
+        <path d="M${pts.map((p) => p.map((v) => v.toFixed(1)).join(',')).join('L')}Z" fill="${SECT_COL[sec.kind]}"/>
+        <text x="${mid[0].toFixed(1)}" y="${(mid[1] + 3.5).toFixed(1)}" text-anchor="middle">${sec.id}</text><title>${sec.id} · ${free} ${s('free')}</title></g>`;
+    });
+    const track = (R) => { const a = []; for (let i = 0; i <= 72; i++) a.push(pt(i * 5, R)); return `M${a.map((p) => p.map((v) => v.toFixed(1)).join(',')).join('L')}Z`; };
+    return `<svg class="st-map st-oval" viewBox="0 0 ${W} ${H}">
+      <path d="${track(58)}" fill="#2a5fc4"/><path d="${track(46)}" fill="#2f8a3c"/>
+      <rect x="${cx - 55}" y="${cy - 36}" width="110" height="72" fill="none" stroke="#e8f5e9" stroke-width="1.2"/>
+      <line x1="${cx}" y1="${cy - 36}" x2="${cx}" y2="${cy + 36}" stroke="#e8f5e9" stroke-width="1.2"/>
+      <circle cx="${cx}" cy="${cy}" r="9" fill="none" stroke="#e8f5e9" stroke-width="1.2"/>
+      <text class="st-stand" x="${cx}" y="12" text-anchor="middle">${s('W')}</text><text class="st-stand" x="${cx}" y="${H - 4}" text-anchor="middle">${s('E')}</text>
+      ${out.join('')}</svg>`;
+  }
+
   window.StadiumMatchPage = async function StadiumMatchPage(page, mid) {
     const { api, esc, money, L, toast, errMsg, S } = K();
     page.className = 'mid';
-    const d = await load();
+    const d = await load(`id=${STADIUM_BY_PREFIX[mid[0]] || 'kaisar'}`);
+    const M3 = module3d(d);
     let info = await api(`/stadium/matches/${mid}`);
     let secId = null, taken = new Set(), picked = [];
     const draw = async () => {
@@ -127,11 +170,11 @@
       page.innerHTML = `
         <a class="back" href="#/stadium">‹ ${s('back')}</a>
         <h1>${esc(info.match.home)} — ${esc(info.match.away)}</h1>
-        <p class="muted">${fmtDay(info.match.date)} · ${info.match.time} · ${esc(d.stadium.name)}</p>
+        <p class="muted">${fmtDay(info.match.date)} · ${info.match.time} · ${esc(L(d.stadium.name))}</p>
         <h3>${s('choose_sector')}</h3>
-        ${sectorMap(d, info.sold, secId)}
-        <div class="st-legend">${['vip', 'center', 'side', 'east', 'end', 'away'].map((k) => `<span><i style="background:${SECT_COL[k]}"></i>${s(k)} · ${money(d.sectors.find((x) => x.kind === k).price)}</span>`).join('')}</div>
-        <p class="small muted">${s('approx')}</p>
+        ${d.stadium.shape === 'oval' ? ovalMap(d, info.sold, secId) : sectorMap(d, info.sold, secId)}
+        <div class="st-legend">${[...new Set(d.sectors.map((x) => x.kind))].map((k) => `<span><i style="background:${SECT_COL[k]}"></i>${s(k)} · ${money(d.sectors.find((x) => x.kind === k).price)}</span>`).join('')}</div>
+        <p class="small muted">${d.stadium.shape === 'oval' ? s('oval_note') : s('approx')}</p>
         ${sec ? `<section class="card st-seats"><h3>${s('sector')} ${sec.id} · ${s(sec.stand)} · ${money(sec.price)}</h3><p class="small muted">${s('pick_seats')}</p>
           <div class="st-grid" style="--n:${sec.seats}">${Array.from({ length: sec.rows }, (_, ri) => {
             const r = sec.rows - ri;
@@ -161,7 +204,7 @@
     };
     const open3D = (sec) => {
       const [r, k] = picked[picked.length - 1].split('-').map(Number);
-      const inf = window.Stadium3D.info(sec, r, k);
+      const inf = M3.info(sec, r, k);
       const view = document.createElement('section');
       view.className = 'view';
       view.innerHTML = `<canvas></canvas><button class="view-close icon-btn" aria-label="${s('back')}"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
@@ -171,7 +214,7 @@
         <div class="sheet-body"><div class="sheet-head"><div><span class="kicker">${s(sec.stand)}</span><h2>${s('sector')} ${sec.id} · ${s('row')} ${r} · ${s('seat')} ${k}</h2><span class="sub">${s(sec.kind)} · ${money(sec.price)}</span></div></div>
         <div class="stats"><div class="stat"><b>${inf.dist.toFixed(0)} м</b><span>${s('to_pitch')}</span></div><div class="stat"><b>${inf.height.toFixed(1)} м</b><span>${s('height')}</span></div><div class="stat"><b>${inf.angle}°</b><span>${s('angle')}</span></div></div></div></div>`;
       document.body.append(view); document.body.classList.add('no-scroll');
-      const close = () => { window.Stadium3D.close(); view.remove(); document.body.classList.remove('no-scroll'); };
+      const close = () => { M3.close(); view.remove(); document.body.classList.remove('no-scroll'); };
       view.querySelector('.view-close').addEventListener('click', close);
       // карточку можно свернуть (полоска / свайп вниз) и вернуть обратно (нажатие / свайп вверх)
       const sheet = view.querySelector('.sheet'), hb = view.querySelector('.handle-btn');
@@ -194,8 +237,8 @@
       });
       sheet.addEventListener('pointercancel', () => { sw = null; });
       try { if (localStorage.getItem('stSheetMin') === '1') setMin(true); } catch (e) { /* ignore */ }
-      if (!window.Stadium3D.available()) { view.querySelector('.sheet').classList.add('open'); return; }
-      window.Stadium3D.open(view.querySelector('canvas'), { sectors: d.sectors, taken: { [sec.id]: [...taken] }, sector: sec, row: r, seat: k, match: info.match,
+      if (!M3.available()) { view.querySelector('.sheet').classList.add('open'); return; }
+      M3.open(view.querySelector('canvas'), { sectors: d.sectors, taken: { [sec.id]: [...taken] }, sector: sec, row: r, seat: k, match: info.match,
         onArrive: () => view.querySelector('.sheet').classList.add('open') });
     };
     const payForm = (sec) => {
