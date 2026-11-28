@@ -1060,6 +1060,31 @@
     if (window.QRCode) new QRCode($('#qr'), { text: `KADR:${b.code}:${b.show.id}`, width: 168, height: 168, colorDark: '#0b0a0c', colorLight: '#ffffff' });
   }
 
+  // билет стадиона / театра в «Мои билеты»: заголовок, дата, места, код, QR
+  function venueTicketHtml(kind, x) {
+    x = { ...x, seats: [...x.seats].sort((a, b) => { const [ra, sa] = a.split('-').map(Number), [rb, sb] = b.split('-').map(Number); return ra - rb || sa - sb; }) };
+    const ST = window.StadiumTX || ((k) => k), TH = window.TheatreTX || ((k) => k);
+    const idDate = (id) => { const m = /(\d{4})(\d{2})(\d{2})/.exec(id) || []; return m[1] ? `${m[1]}-${m[2]}-${m[3]}` : ''; };
+    let ico, title, line, seats;
+    if (kind === 'stadium') {
+      ico = '🏟️';
+      title = x.match ? `${esc(x.match.home)} — ${esc(x.match.away)}` : 'Қайсар Арена';
+      line = `${fmtDay(x.match ? x.match.date : idDate(x.match_id))}${x.match ? ' · ' + x.match.time : ''} · Қайсар Арена`;
+      seats = x.seats.map((p) => `<li><span>${ST('sector')} ${esc(x.sector)} · ${ST('row')} ${p.split('-')[0]}, ${ST('seat')} ${p.split('-')[1]}</span></li>`).join('');
+    } else {
+      ico = '🎭';
+      title = x.show ? esc(L(x.show.play.title)) : TH('title');
+      line = `${fmtDay(x.show ? x.show.date : idDate(x.show_id))}${x.show ? ' · ' + x.show.time : ''} · ${esc(TH('title'))}`;
+      seats = x.seats.map((p) => `<li><span>${TH('row')} ${p.split('-')[0]}, ${TH('seat')} ${p.split('-')[1]}</span></li>`).join('');
+    }
+    return `<div class="ticket">
+      <div class="t-top"><span class="t-ico">${ico}</span><div><h3>${title}</h3><p class="muted">${line}</p></div></div>
+      <ul class="t-seats">${seats}</ul>
+      <div class="t-foot"><div><small class="muted">${t('booking_code')}</small><b class="code">${esc(x.code)}</b></div><div class="t-sum"><small class="muted">${t('total')}</small><b>${money(x.total)}</b></div></div>
+      <div class="t-qr small"><div data-qr="${kind === 'stadium' ? 'KAISAR' : 'BEKEZHANOV'}:${esc(x.code)}"></div></div>
+    </div>`;
+  }
+
   async function pageTickets(page) {
     page.className = 'mid';
     if (!S.user) {
@@ -1067,14 +1092,22 @@
       return;
     }
     const ok = fresh();
-    const { bookings } = await api('/bookings');
+    const safe = (p, key) => p.then((r) => r[key] || []).catch(() => []);
+    const [bookings, stadium, theatre] = await Promise.all([
+      safe(api('/bookings'), 'bookings'), safe(api('/stadium/my'), 'tickets'), safe(api('/theatre/my'), 'tickets'),
+    ]);
     if (!ok()) return;
-    const up = bookings.filter((b) => b.show && !b.show.past);
-    const past = bookings.filter((b) => b.show && b.show.past);
-    const block = (title, list) => (list.length ? `<h3 class="sec">${title}</h3><div class="tlist">${list.map((b) => `<a href="#/ticket/${b.code}" class="tlink">${ticketHtml(b, false)}</a>`).join('')}</div>` : '');
-    page.innerHTML = `<h1>${t('my_tickets')}</h1>` + (bookings.length ? block(t('upcoming'), up) + block(t('past_tickets'), past)
-      : `<div class="card center"><p>${t('no_tickets')}</p><a class="btn btn-green" href="#/cinema">${t('to_afisha')}</a></div>`);
-    if (window.TheatreTickets) window.TheatreTickets(page);
+    const nowIso = new Date(Date.now() + 5 * 3600e3).toISOString().slice(0, 16); // время Казахстана (UTC+5), как в расписании
+    const upcomingVenue = (x, ev) => ev && ev.starts_at > nowIso;
+    const items = [
+      ...bookings.filter((b) => b.show).map((b) => ({ up: !b.show.past, html: `<a href="#/ticket/${b.code}" class="tlink">${ticketHtml(b, false)}</a>` })),
+      ...stadium.map((x) => ({ up: upcomingVenue(x, x.match), html: venueTicketHtml('stadium', x) })),
+      ...theatre.map((x) => ({ up: upcomingVenue(x, x.show), html: venueTicketHtml('theatre', x) })),
+    ];
+    const block = (title, list) => (list.length ? `<h3 class="sec">${title}</h3><div class="tlist">${list.map((x) => x.html).join('')}</div>` : '');
+    page.innerHTML = `<h1>${t('my_tickets')}</h1>` + (items.length ? block(t('upcoming'), items.filter((x) => x.up)) + block(t('past_tickets'), items.filter((x) => !x.up))
+      : `<div class="card center"><p>${t('no_tickets')}</p><a class="btn btn-green" href="#/">${t('to_afisha')}</a></div>`);
+    if (window.QRCode) page.querySelectorAll('[data-qr]').forEach((el) => new QRCode(el, { text: el.dataset.qr, width: 120, height: 120 }));
   }
 
   // ---------- Вход, регистрация, профиль ----------

@@ -993,3 +993,6 @@ body.kids .logo-mark { background: linear-gradient(135deg, #ffcf5c, #ff7ab6); }
 .th-scroll::-webkit-scrollbar-thumb { background: #4a4850; border-radius: 4px; }
 .th-scroll::-webkit-scrollbar-track { background: transparent; }
 .hc-photo { background-position: center, var(--pos, center); }
+.t-ico { font-size: 34px; line-height: 1; flex: none; width: 48px; text-align: center; }
+.t-qr.small { margin-top: 12px; padding-top: 12px; }
+.t-qr.small img, .t-qr.small canvas { background: #fff; padding: 6px; border-radius: 8px; }
