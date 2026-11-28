@@ -25,6 +25,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 import catalog as C
 import dbconn
 import extras
+import stadium
 import posters
 import store
 
@@ -117,6 +118,7 @@ def init_db() -> None:
     conn.execute("PRAGMA journal_mode = WAL")
     store.init(conn)
     extras.init(conn)
+    stadium.init(conn)
     conn.close()
 
 
@@ -590,6 +592,8 @@ admin.setup(db=db, now=now, err=err, body=_body, current_user=current_user, is_a
 app.register_blueprint(admin.bp)
 extras.setup(db=db, now=now, err=err, body=_body, current_user=current_user, is_admin=is_admin, check_card=check_card)
 app.register_blueprint(extras.bp)
+stadium.setup(db=db, now=now, err=err, body=_body, current_user=current_user, check_card=check_card, IntegrityError=dbconn.IntegrityError)
+app.register_blueprint(stadium.bp)
 
 
 @app.errorhandler(404)

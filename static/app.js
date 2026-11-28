@@ -324,7 +324,7 @@
     $$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
     $$('[data-lang]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.lang === S.lang)));
     const hash = location.hash || '#/';
-    const section = hash.startsWith('#/admin') ? 'admin'
+    const section = hash.startsWith('#/stadium') ? 'stadium' : (hash === '#/' || hash === '#') ? 'hub' : hash.startsWith('#/admin') ? 'admin'
       : hash.startsWith('#/tickets') || hash.startsWith('#/ticket/') ? 'tickets'
       : hash.startsWith('#/profile') || hash.startsWith('#/login') || hash.startsWith('#/register') ? 'profile' : 'home';
     $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === section));
@@ -502,7 +502,7 @@
     if (!m) return notFound(page);
     page.className = 'wide';
     page.innerHTML = `
-      <a class="back" href="#/">‹ ${t('back')}</a>
+      <a class="back" href="#/cinema">‹ ${t('back')}</a>
       <section class="movie">
         ${poster(m, 'lg')}
         <div class="movie-info">
@@ -842,7 +842,7 @@
   let cardDraft = null;
 
   async function pageCheckout(page) {
-    if (!S.order || !S.order.seats.length) { location.hash = '#/'; return; }
+    if (!S.order || !S.order.seats.length) { location.hash = '#/cinema'; return; }
     if (!S.user) { location.hash = '#/login?next=checkout'; return; }
     let data, bonus = { balance: 0, max_share: 50 };
     const ok = fresh();
@@ -1052,7 +1052,7 @@
     page.innerHTML = `
       ${q.get('new') ? `<div class="success"><span class="check">✓</span><h1>${t('paid_ok')}</h1></div>` : `<a class="back" href="#/tickets">‹ ${t('my_tickets')}</a><h1>${t('your_ticket')}</h1>`}
       ${ticketHtml(b, true)}
-      <div class="actions"><a class="btn btn-ghost-b" href="#/tickets">${t('my_tickets')}</a><a class="btn btn-white" href="#/">${t('to_afisha')}</a></div>`;
+      <div class="actions"><a class="btn btn-ghost-b" href="#/tickets">${t('my_tickets')}</a><a class="btn btn-white" href="#/cinema">${t('to_afisha')}</a></div>`;
     if (window.QRCode) new QRCode($('#qr'), { text: `KADR:${b.code}:${b.show.id}`, width: 168, height: 168, colorDark: '#0b0a0c', colorLight: '#ffffff' });
   }
 
@@ -1069,7 +1069,7 @@
     const past = bookings.filter((b) => b.show && b.show.past);
     const block = (title, list) => (list.length ? `<h3 class="sec">${title}</h3><div class="tlist">${list.map((b) => `<a href="#/ticket/${b.code}" class="tlink">${ticketHtml(b, false)}</a>`).join('')}</div>` : '');
     page.innerHTML = `<h1>${t('my_tickets')}</h1>` + (bookings.length ? block(t('upcoming'), up) + block(t('past_tickets'), past)
-      : `<div class="card center"><p>${t('no_tickets')}</p><a class="btn btn-green" href="#/">${t('to_afisha')}</a></div>`);
+      : `<div class="card center"><p>${t('no_tickets')}</p><a class="btn btn-green" href="#/cinema">${t('to_afisha')}</a></div>`);
   }
 
   // ---------- Вход, регистрация, профиль ----------
@@ -1156,7 +1156,7 @@
       S.user = null;
       S.lists = { favorites: [], reminders: [] };
       toast(t('bye'));
-      location.hash = '#/';
+      location.hash = '#/cinema';
     });
   }
 
@@ -1301,7 +1301,7 @@
       <p class="small muted">${t('gift_how')}</p>
       <div class="actions">
         <button class="btn btn-green" id="shareGift">${t('gift_share')}</button>
-        <a class="btn btn-white" href="#/">${t('choose_film')}</a>
+        <a class="btn btn-white" href="#/cinema">${t('choose_film')}</a>
       </div>`;
     $('#shareGift').addEventListener('click', async () => {
       const text = `${t('gift_share_text')} ${link}`;
@@ -1314,12 +1314,15 @@
 
   function notFound(page, msg) {
     page.className = 'narrow';
-    page.innerHTML = `<div class="card center"><p>${esc(msg || t('err_not_found'))}</p><a class="btn btn-green" href="#/">${t('to_afisha')}</a></div>`;
+    page.innerHTML = `<div class="card center"><p>${esc(msg || t('err_not_found'))}</p><a class="btn btn-green" href="#/cinema">${t('to_afisha')}</a></div>`;
   }
 
   // ---------- Роутер ----------
   const routes = [
-    [/^\/?$/, pageHome],
+    [/^\/?$/, (p) => (window.HubPage ? window.HubPage(p) : pageHome(p))],
+    [/^\/cinema$/, pageHome],
+    [/^\/stadium$/, (p) => window.StadiumPage(p)],
+    [/^\/stadium\/(m\d{8})$/, (p, mid) => window.StadiumMatchPage(p, mid)],
     [/^\/movie\/(\d+)$/, pageMovie],
     [/^\/session\/([\w-]+)$/, pageSession],
     [/^\/checkout$/, pageCheckout],
