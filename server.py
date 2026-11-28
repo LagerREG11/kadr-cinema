@@ -26,6 +26,7 @@ import catalog as C
 import dbconn
 import extras
 import stadium
+import theatre
 import posters
 import store
 
@@ -119,6 +120,7 @@ def init_db() -> None:
     store.init(conn)
     extras.init(conn)
     stadium.init(conn)
+    theatre.init(conn)
     conn.close()
 
 
@@ -594,6 +596,8 @@ extras.setup(db=db, now=now, err=err, body=_body, current_user=current_user, is_
 app.register_blueprint(extras.bp)
 stadium.setup(db=db, now=now, err=err, body=_body, current_user=current_user, check_card=check_card, IntegrityError=dbconn.IntegrityError)
 app.register_blueprint(stadium.bp)
+theatre.setup(db=db, now=now, err=err, body=_body, current_user=current_user, check_card=check_card, IntegrityError=dbconn.IntegrityError)
+app.register_blueprint(theatre.bp)
 
 
 @app.errorhandler(404)

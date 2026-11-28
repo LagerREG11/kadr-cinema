@@ -6,3 +6,4 @@ instance/
 *.db-shm
 *.db-wal
 .env
+refs/

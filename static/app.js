@@ -324,12 +324,16 @@
     $$('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
     $$('[data-lang]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.lang === S.lang)));
     const hash = location.hash || '#/';
-    const section = hash.startsWith('#/stadium') ? 'stadium' : (hash === '#/' || hash === '#') ? 'hub' : hash.startsWith('#/admin') ? 'admin'
+    const section = hash.startsWith('#/stadium') ? 'stadium' : hash.startsWith('#/theatre') ? 'theatre' : (hash === '#/' || hash === '#') ? 'hub' : hash.startsWith('#/admin') ? 'admin'
       : hash.startsWith('#/tickets') || hash.startsWith('#/ticket/') ? 'tickets'
       : hash.startsWith('#/profile') || hash.startsWith('#/login') || hash.startsWith('#/register') ? 'profile' : 'home';
     $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === section));
     const cb = $('#cityBtn');
     if (cb && S.cat) cb.querySelector('span').textContent = cityName(S.city || S.cat.default_city);
+    // название города в логотипе; разделы, которые есть только в одном городе, скрываются в других
+    const curCity = S.city || (S.cat && S.cat.default_city) || 'kzo';
+    const lc = $('#logoCity'); if (lc && S.cat) lc.textContent = cityName(curCity);
+    $$('[data-local]').forEach((a) => { a.hidden = a.dataset.local !== curCity; });
     document.body.classList.toggle('kids', !!S.kids);
     const an = $('#adminNav');
     if (an) an.hidden = !(S.user && S.user.is_admin);
@@ -1070,6 +1074,7 @@
     const block = (title, list) => (list.length ? `<h3 class="sec">${title}</h3><div class="tlist">${list.map((b) => `<a href="#/ticket/${b.code}" class="tlink">${ticketHtml(b, false)}</a>`).join('')}</div>` : '');
     page.innerHTML = `<h1>${t('my_tickets')}</h1>` + (bookings.length ? block(t('upcoming'), up) + block(t('past_tickets'), past)
       : `<div class="card center"><p>${t('no_tickets')}</p><a class="btn btn-green" href="#/cinema">${t('to_afisha')}</a></div>`);
+    if (window.TheatreTickets) window.TheatreTickets(page);
   }
 
   // ---------- Вход, регистрация, профиль ----------
@@ -1322,6 +1327,8 @@
     [/^\/?$/, (p) => (window.HubPage ? window.HubPage(p) : pageHome(p))],
     [/^\/cinema$/, pageHome],
     [/^\/stadium$/, (p) => window.StadiumPage(p)],
+    [/^\/theatre$/, (p) => window.TheatrePage(p)],
+    [/^\/theatre\/(t\d{8}-\d{4})$/, (p, sid) => window.TheatreShowPage(p, sid)],
     [/^\/stadium\/(m\d{8})$/, (p, mid) => window.StadiumMatchPage(p, mid)],
     [/^\/movie\/(\d+)$/, pageMovie],
     [/^\/session\/([\w-]+)$/, pageSession],
@@ -1393,7 +1400,7 @@
   </defs></svg>`);
 
   // общие функции для admin.js
-  window.KADR = { api, S, t, L, esc, money, toast, poster, fmtDay, movieById, langLabel, errMsg, fresh, reloadCatalog, $, $$ };
+  window.KADR = { api, S, t, L, esc, money, cityName, toast, poster, fmtDay, movieById, langLabel, errMsg, fresh, reloadCatalog, $, $$ };
 
   (async () => {
     updateChrome();

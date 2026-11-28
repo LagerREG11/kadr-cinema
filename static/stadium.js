@@ -4,7 +4,7 @@
   const K = () => window.KADR;
   const TX = {
     kk: {
-      hub_title: '3D City · Қызылорда', hub_sub: 'Қаланың орындарын 3D-де көріп, билетті онлайн алыңыз.',
+      hub_title: '3D City · {c}', hub_sub: '{c}: орындарды 3D-де көріп, билетті онлайн алыңыз.', soon_city: '{c} қаласының 3D нысандары (стадион, театр т.б.) жақында қосылады',
       cinema: 'KADR Cinema', cinema_d: 'Кинотеатр: афиша, орынды таңдау, 3D залдан көрініс', stadium: 'Қайсар Арена', stadium_d: 'Стадион: матчтар, секторлар, 3D трибунадан көрініс',
       soon: 'Жақында', soon_d: 'Жаңа 3D нысандар қосылады', open: 'Ашу',
       st_facts: '11 000 орын · алаң 105×68 м · УЕФА IV санаты', matches: 'Матчтар', demo: 'Демо-кесте: нақты матчтар емес',
@@ -15,7 +15,7 @@
       W: 'Батыс трибуна', E: 'Шығыс трибуна', N: 'Солтүстік трибуна', S: 'Оңтүстік трибуна',
     },
     ru: {
-      hub_title: '3D City · Кызылорда', hub_sub: 'Смотрите места города в 3D и покупайте билеты онлайн.',
+      hub_title: '3D City · {c}', hub_sub: '{c}: смотрите места в 3D и покупайте билеты онлайн.', soon_city: '3D-объекты города {c} (стадион, театр и др.) появятся скоро',
       cinema: 'KADR Cinema', cinema_d: 'Кинотеатр: афиша, выбор места, вид из зала в 3D', stadium: 'Қайсар Арена', stadium_d: 'Стадион: матчи, секторы, вид с трибуны в 3D',
       soon: 'Скоро', soon_d: 'Добавим новые 3D-объекты', open: 'Открыть',
       st_facts: '11 000 мест · поле 105×68 м · УЕФА IV категория', matches: 'Матчи', demo: 'Демо-расписание: не реальные матчи',
@@ -34,12 +34,18 @@
   // ---------- Главная 3D City ----------
   window.HubPage = function HubPage(page) {
     page.className = 'wide';
+    const { S, cityName } = K();
+    const city = S.city || (S.cat && S.cat.default_city) || 'kzo';
+    const c = cityName(city) || 'Қызылорда';
+    const local = city === 'kzo'; // стадион и театр пока есть только в Кызылорде
     page.innerHTML = `
-      <section class="hub-hero"><h1>${s('hub_title')}</h1><p class="muted">${s('hub_sub')}</p></section>
+      <section class="hub-hero"><h1>${s('hub_title', { c })}</h1><p class="muted">${s('hub_sub', { c })}</p></section>
       <div class="hub-grid">
         <a class="hub-card hc-cinema" href="#/cinema"><span class="hc-art">🎬</span><b>${s('cinema')}</b><small>${s('cinema_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
-        <a class="hub-card hc-stadium" href="#/stadium"><span class="hc-art">🏟️</span><b>${s('stadium')}</b><small>${s('stadium_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
-        <div class="hub-card hc-soon"><span class="hc-art">✨</span><b>${s('soon')}</b><small>${s('soon_d')}</small></div>
+        ${local ? `<a class="hub-card hc-stadium" href="#/stadium"><span class="hc-art">🏟️</span><b>${s('stadium')}</b><small>${s('stadium_d')}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
+        <a class="hub-card hc-theatre" href="#/theatre"><span class="hc-art">🎭</span><b>${window.TheatreTX ? window.TheatreTX('hub') : 'Театр'}</b><small>${window.TheatreTX ? window.TheatreTX('hub_d') : ''}</small><span class="btn btn-green btn-sm">${s('open')}</span></a>
+` : ''}
+        <div class="hub-card hc-soon"><span class="hc-art">✨</span><b>${s('soon')}</b><small>${local ? s('soon_d') : s('soon_city', { c })}</small></div>
       </div>`;
   };
 
