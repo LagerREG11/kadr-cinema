@@ -37,7 +37,7 @@
     const d = await load();
     const minP = Math.min(...d.rows.map((r) => r.price));
     page.innerHTML = `
-      <a class="back" href="#/">‹ 3D City</a>
+      <a class="back" href="#/">‹ 3D Ticket</a>
       <section class="th-hero"><div><h1>🎭 ${esc(L(d.theatre.name))}</h1><p>${esc(L(d.theatre.full))}</p>
         <p class="muted small">${esc(L(d.theatre.address))} · ${s('facts', { n: d.total })}</p></div></section>
       <h3>${s('shows')}</h3><p class="small muted">${s('demo')}</p>

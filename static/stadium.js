@@ -1,10 +1,10 @@
-/* 3D City: главная страница-хаб и раздел стадиона «Қайсар Арена» (матчи → секторы → места → 3D-вид → покупка). */
+/* 3D Ticket: главная страница-хаб и раздел стадиона «Қайсар Арена» (матчи → секторы → места → 3D-вид → покупка). */
 (() => {
   'use strict';
   const K = () => window.KADR;
   const TX = {
     kk: {
-      hub_title: '3D City · {c}', hub_sub: '{c}: орындарды 3D-де көріп, билетті онлайн алыңыз.', soon_city: '{c} қаласының 3D нысандары (стадион, театр т.б.) жақында қосылады',
+      hub_title: '3D Ticket · {c}', hub_sub: '{c}: орындарды 3D-де көріп, билетті онлайн алыңыз.', soon_city: '{c} қаласының 3D нысандары (стадион, театр т.б.) жақында қосылады',
       cinema: 'KADR Cinema', cinema_d: 'Кинотеатр: афиша, орынды таңдау, 3D залдан көрініс', stadium: 'Қайсар Арена', stadium_d: 'Стадион: матчтар, секторлар, 3D трибунадан көрініс',
       soon: 'Жақында', soon_d: 'Жаңа 3D нысандар қосылады', open: 'Ашу',
       st_facts: '11 000 орын · алаң 105×68 м · УЕФА IV санаты', matches: 'Матчтар', demo: 'Демо-кесте: нақты матчтар емес',
@@ -15,7 +15,7 @@
       W: 'Батыс трибуна', E: 'Шығыс трибуна', N: 'Солтүстік трибуна', S: 'Оңтүстік трибуна',
     },
     ru: {
-      hub_title: '3D City · {c}', hub_sub: '{c}: смотрите места в 3D и покупайте билеты онлайн.', soon_city: '3D-объекты города {c} (стадион, театр и др.) появятся скоро',
+      hub_title: '3D Ticket · {c}', hub_sub: '{c}: смотрите места в 3D и покупайте билеты онлайн.', soon_city: '3D-объекты города {c} (стадион, театр и др.) появятся скоро',
       cinema: 'KADR Cinema', cinema_d: 'Кинотеатр: афиша, выбор места, вид из зала в 3D', stadium: 'Қайсар Арена', stadium_d: 'Стадион: матчи, секторы, вид с трибуны в 3D',
       soon: 'Скоро', soon_d: 'Добавим новые 3D-объекты', open: 'Открыть',
       st_facts: '11 000 мест · поле 105×68 м · УЕФА IV категория', matches: 'Матчи', demo: 'Демо-расписание: не реальные матчи',
@@ -31,7 +31,7 @@
   const load = async () => (data = data || await K().api('/stadium'));
   const fmtDay = (iso) => K().fmtDay(iso);
 
-  // ---------- Главная 3D City ----------
+  // ---------- Главная 3D Ticket ----------
   window.HubPage = function HubPage(page) {
     page.className = 'wide';
     const { S, cityName } = K();
@@ -56,7 +56,7 @@
     const d = await load();
     const minP = Math.min(...d.sectors.map((x) => x.price));
     page.innerHTML = `
-      <a class="back" href="#/">‹ 3D City</a>
+      <a class="back" href="#/">‹ 3D Ticket</a>
       <section class="st-hero"><div><h1>🏟️ ${esc(d.stadium.name)}</h1><p class="muted">${esc(L(d.stadium.city))} · ${s('st_facts')}</p></div></section>
       <h3>${s('matches')}</h3><p class="small muted">${s('demo')}</p>
       <div class="st-matches">${d.matches.map((m) => `<a class="st-match" href="#/stadium/${m.id}">

@@ -893,7 +893,7 @@ body.kids .logo-mark { background: linear-gradient(135deg, #ffcf5c, #ff7ab6); }
 .view .view-close, .view .view-hint, .view .sheet, .view .view-mood, .view .view-sound { z-index: 2; }
 @media (max-width: 760px) { .kids-bar .chip-btn { font-size: 12px; padding: 6px 11px; } }
 
-/* ===== 3D City: главная и стадион ===== */
+/* ===== 3D Ticket: главная и стадион ===== */
 .logo-mark { font-size: 13px; letter-spacing: -.02em; }
 .hub-hero { padding: 26px 0 8px; }
 .hub-hero h1 { font-size: 34px; }
